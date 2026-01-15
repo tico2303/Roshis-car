@@ -1,3 +1,6 @@
 .venv/*
 __pycache__/*
 .git/*
+./piper-data
+pi/app/__pycache__
+.DS_Store

@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Sync to Pi",
+      "type": "shell",
+      "command": "/Users/tico/bin/syncpi"
+    },
+    {
+      "label": "Run on Pi",
+      "type": "shell",
+      "command": "/Users/tico/bin/runpi"
+    },
+    {
+      "label": "Sync + Run on Pi",
+      "dependsOrder": "sequence",
+      "dependsOn": ["Sync to Pi", "Run on Pi"]
+    }
+  ]
+}

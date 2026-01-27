@@ -174,4 +174,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import os
+    print("===== Main.py Started =====")
+    print("PID:", os.getpid())
     main()

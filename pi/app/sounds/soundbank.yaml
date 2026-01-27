@@ -1,0 +1,88 @@
+version: 1
+base_dir: clips
+
+sounds:
+  - id: success.great
+    file: great-success.mp3
+    tags: [event:success, mood:happy, intent:celebration, intensity:high, character:cartoon, rating:clean]
+    weight: 1.2
+
+  - id: fail.trombone
+    file: wah-wah-sad-trombone.mp3
+    tags: [event:fail, mood:sad, mood:sarcasm, intent:mockery, intent:sarcasm, intensity:medium, character:cartoon, rating:clean]
+    weight: 1.2
+
+  - id: emotion.aww
+    file: aww-sfx.mp3
+    tags: [mood:affectionate, intent:affection, intensity:low, character:human]
+    weight: 1.0
+
+  - id: robot.bloop
+    file: little-robot-sound.mp3
+    tags: [event:ack, mood:curious, character:robotic, intensity:low]
+    weight: 1.3
+
+  - id: error.basic
+    file: error.mp3
+    tags: [event:error, mood:annoyed, intensity:medium]
+    weight: 1.5
+
+  - id: fail.basic
+    file: fail.mp3
+    tags: [event:fail, mood:sad, intensity:medium]
+    weight: 1.0
+
+  - id: impact.cinematic
+    file: cinematic-hit-3.mp3
+    tags: [event:alert, intensity:high, character:cinematic]
+    weight: 0.7
+
+  - id: animal.dog
+    file: dog-bark-sfx.mp3
+    tags: [character:animal, intent:attention, intensity:medium]
+    weight: 0.6
+
+  - id: animal.horse
+    file: horse-neigh-sfx.mp3
+    tags: [character:animal, intent:surprise, intensity:medium]
+    weight: 0.4
+
+  - id: human.hmmm
+    file: hmmm-sound-male-sfx.mp3
+    tags: [mood:curious, intent:thinking, character:human, intensity:low]
+    weight: 1.1
+
+  - id: crowd.laugh
+    file: laughing-crowd-sound-effect-type-03.mp3
+    tags: [intent:sarcasm, mood:teasing, character:crowd, intensity:high]
+    weight: 0.8
+
+  - id: laugh.jeffy
+    file: jeffy-laughing.mp3
+    tags: [mood:mischievous, intent:mockery, character:cartoon, intensity:high]
+    weight: 0.7
+
+  - id: bass.impulse
+    file: sub-bass-impulse.mp3
+    tags: [event:alert, intensity:high, character:robotic]
+    weight: 0.6
+
+  - id: fart.short
+    file: short-fart.mp3
+    tags: [intent:sarcasm, mood:mischievous, style:fart, intensity:low, rating:rude]
+    weight: 1.0
+
+  - id: fart.4
+    file: fart-4.mp3
+    tags: [intent:sarcasm, mood:mischievous, style:fart, intensity:medium, rating:rude]
+    weight: 0.9
+
+  - id: fart.5
+    file: fart-5.mp3
+    tags: [intent:sarcasm, mood:mischievous, style:fart, intensity:high, rating:rude]
+    weight: 0.8
+
+  - id: fart.proud
+    file: proud-fart.mp3
+    tags: [intent:celebration, mood:proud, style:fart, intensity:medium, rating:rude]
+    weight: 0.5

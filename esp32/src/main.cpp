@@ -4,6 +4,7 @@
 #include "robot_config.h"
 #include <Bounce2.h>
 #include "feeder.h"
+#include "utils.h"
 // ------------------------------------------------------------
 // main.cpp
 //
@@ -11,7 +12,8 @@
 // on Serial and drives the robot using DriveTrain.
 //
 // Currently implemented:
-//   - onDrive callback only
+//   - onDrive callback
+//   - onFeed callback
 //
 //   - If no drive command is received for DRIVE_TIMEOUT_MS, motors stop.
 // ------------------------------------------------------------
@@ -24,22 +26,14 @@ static Protocol proto(Serial);
 
 // controls feeder servo
 static Feeder feeder = Feeder(RobotConfig::feederConfig);
+
+// utils
+static Utils utils = Utils();
+
 // Stop motors if commands stop arriving (failsafe)
 static constexpr uint32_t DRIVE_TIMEOUT_MS = 500;
 
 static volatile uint32_t lastDriveMs = 0;
-
-static int clampInt(int v, int lo, int hi) {
-  if (v < lo) return lo;
-  if (v > hi) return hi;
-  return v;
-}
-
-static int map100To255(int v) {
-  v = clampInt(v, -100, 100);
-  // Scale -100..100 to roughly -255..255
-  return (v * 255) / 100;
-}
 
 // -------------------- Protocol callback: onDrive --------------------
 static void handleDrive(uint32_t seq, const Protocol::DriveCmd& cmd) {
@@ -49,8 +43,8 @@ static void handleDrive(uint32_t seq, const Protocol::DriveCmd& cmd) {
   lastDriveMs = millis();
 
   // Convert protocol units -> motor units
-  const int throttle = RobotConfig::THR_SIGN * map100To255(cmd.thr);
-  const int steer    = RobotConfig::STR_SIGN * map100To255(cmd.str);
+  const int throttle = RobotConfig::THR_SIGN * utils.map100To255(cmd.thr);
+  const int steer    = RobotConfig::STR_SIGN * utils.map100To255(cmd.str);
 
   // DriveTrain uses arcade mixing internally
   drive.arcadeDrive(throttle, steer);

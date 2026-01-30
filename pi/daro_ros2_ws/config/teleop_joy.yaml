@@ -1,0 +1,91 @@
+/**:
+  ros__parameters:
+
+    # teleop_twist_joy: Xbox controller -> /cmd_vel (geometry_msgs/Twist)
+    #
+    #   - "linear"  = straight-line motion (forward/back, left/right, up/down)
+    #   - "angular" = rotation around an axis (turning/spinning)
+    #
+    # For a Daro car:
+    #   - linear.x   => drive forward/backward
+    #   - angular.yaw (published as angular.z in /cmd_vel) => turn left/right
+    #
+
+    # Xbox controllers using xpadneo
+    #   axes[0] = Left Stick X   (left/right)
+    #   axes[1] = Left Stick Y   (up/down)      
+    #   axes[2] = LT trigger     (often 1.0 at rest -> -1.0 pressed)
+    #   axes[3] = Right Stick X  (left/right)   <-- usually best for turning
+    #   axes[4] = Right Stick Y  (up/down)
+    #   axes[5] = RT trigger     (often 1.0 at rest -> -1.0 pressed)
+    #   axes[6] = D-pad X or other (varies: sometimes D-pad, sometimes "unused")
+    #   axes[7] = D-pad Y or other (varies)
+    #
+    # Verify mapping with:
+    #   ros2 topic echo /joy
+
+    axis_linear:
+      x: 1        # axes[1] = Left Stick Y (common;
+      y: -1     # not used  
+      z: -1      #not used 
+
+    # 2) Turning mapping (angular.yaw)
+    #
+    # "yaw" is rotation around the vertical axis (turning left/right on the floor).
+    # teleop_twist_joy uses "yaw" and outputs it as angular.z in the Twist message.
+
+    axis_angular:
+      yaw: 0      # axes[3] = Right Stick X (common; if turning doesn't work, try 0)
+      pitch: -1   # unused
+      roll: -1    # unused
+
+    # 3) Scaling (how sensitive it is)
+    #
+    # scale_linear.x sets how fast you go for full stick deflection.
+    # scale_angular.yaw sets how fast you turn for full stick deflection.
+    #
+    # just multipliers:
+    #   output = input * scale
+
+    scale_linear:
+      x: 1.0
+      y: 0.0
+      z: 0.0
+
+    scale_angular:
+      yaw: 1.0
+      pitch: 0.0
+      roll: 0.0
+
+    # 4) Safety gating (deadman switch)
+    #
+    # require_enable_button:
+    #   - true  => you MUST hold a button to allow motion (recommended for robots)
+    #   - false => motion happens whenever stick moves (good for initial debugging)
+    #
+    # not using now could be useful later
+
+    require_enable_button: false
+    enable_button: 5          # ignored when require_enable_button is false
+
+    # 5) Optional "turbo" mode
+    #
+    # enable_turbo_button: hold this button to use turbo scales instead
+
+    enable_turbo_button: -1   # -1 disables turbo button
+
+    scale_linear_turbo:
+      x: 1.0
+      y: 0.0
+      z: 0.0
+
+    scale_angular_turbo:
+      yaw: 3.0
+      pitch: 0.0
+      roll: 0.0
+
+    # 6) Misc
+
+    inverted_reverse: false
+    publish_stamped_twist: false
+    frame: teleop_twist_joy

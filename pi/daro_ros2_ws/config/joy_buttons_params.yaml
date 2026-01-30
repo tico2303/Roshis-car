@@ -1,0 +1,18 @@
+/**:
+  ros__parameters:
+    # Input topic
+    joy_topic: /joy
+
+    # Base namespace for events
+    events_ns: /daro/events
+
+    # Button index mapping (these indices come from /joy echo)
+    # Xbox mapping:
+    #   0=A, 1=B, 2=X, 3=Y, 4=LB, 5=RB, 6=select/View, 7=Start/Menu,
+    #   8=LeftPress, 9=RightPress
+
+    # file to button mappings for simpler yaml parsing
+    mapping_file: /home/pi/Code/Roshis-car/pi/daro_ros2_ws/config/joy_buttons_map.yaml
+
+    # Only publish on press (0->1). If false, publishes on release too.
+    publish_on_press: true

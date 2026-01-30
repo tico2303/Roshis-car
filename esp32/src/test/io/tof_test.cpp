@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include "tof_manager.h"
+#include "tof/tof_manager.h"
 #include "robot_config.h"
 
 static TofManager tof(

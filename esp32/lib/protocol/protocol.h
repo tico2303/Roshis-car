@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include "tof_manager.h"
+#include "tof/tof_manager.h"
 /**
  * Robot Serial Protocol (newline-delimited JSON).
  *

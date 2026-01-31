@@ -18,6 +18,7 @@ def generate_launch_description():
     default_teleop = os.path.join(bringup_share, "config", "teleop_joy.yaml")
     default_buttons_params = os.path.join(bringup_share, "config", "joy_buttons_params.yaml")
     default_buttons_map = os.path.join(bringup_share, "config", "joy_buttons_map.yaml")
+    default_twist_params = os.path.join(bringup_share, "config", "twist_to_drv.yaml")
 
     joy_dev = LaunchConfiguration("joy_dev")
     teleop_params = LaunchConfiguration("teleop_params")
@@ -119,17 +120,7 @@ def generate_launch_description():
             executable="twist_to_drv",
             name="twist_to_drv",
             output="screen",
-            parameters=[{
-                "cmd_vel_topic": "/cmd_vel",
-                "tx_topic": "/esp32/tx_json",
-                "thr_max": thr_max,
-                "str_max": str_max,
-                "cmd_timeout_s": cmd_timeout_s,
-                "publish_hz": publish_hz,
-                # leave signs default; flip later if needed:
-                # "thr_sign": 1,
-                # "str_sign": 1,
-            }],
+            parameters=[default_twist_params],
         ),
         # bridge from ros to esp32 serial
          Node(

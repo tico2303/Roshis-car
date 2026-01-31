@@ -49,7 +49,7 @@ class NdjsonBridgeNode(Node):
         super().__init__("ndjson_bridge")
 
         # -------- Params --------
-        self.declare_parameter("port", "/dev/ttyACM0")
+        self.declare_parameter("port", "/dev/ttyUSB0")
         self.declare_parameter("baud", 115200)
         self.declare_parameter("reconnect_sleep_ms", 200)
 

@@ -1,0 +1,25 @@
+# -----------------------
+# DARO full robot params
+# -----------------------
+
+ndjson_bridge_node:
+  ros__parameters:
+    port: "/dev/ttyUSB0"
+    baud: 115200
+
+tof_to_range_node:
+  ros__parameters:
+    rx_topic: "/esp32/rx_json/tof"
+    pub_topic: "/tof/range"
+    frame_id: "tof_link"
+    tof_min_range_m: 0.035
+    tof_max_range_m: 4.0
+    tof_fov_rad: 0.26
+    use_ros_time: true
+
+
+joy_buttons_node:
+  ros__parameters:
+    # placeholders for now:
+    deadman_button: 4
+    turbo_button: 5

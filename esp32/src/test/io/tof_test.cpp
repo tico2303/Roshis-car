@@ -1,47 +1,31 @@
 #include <Arduino.h>
-#include "tof/tof_manager.h"
+
 #include "robot_config.h"
+#include "i2c_bus.h"
+#include "tof/tof_manager.h"
+#include "protocol.h"
 
-static TofManager tof(
-    RobotConfig::TOF_CFG,
-  RobotConfig::TOF_CFG_COUNT / sizeof(RobotConfig::TOF_CFG[0])
-);
-
+// One bus, one ToF manager, one protocol.
+static I2CBus     i2c(RobotConfig::I2C);
+static TofManager tof(RobotConfig::TOF_CFG, RobotConfig::TOF_CFG_COUNT);
+static Protocol   proto(Serial);
 
 void setup() {
-  Serial.begin(115200);
-  delay(500);
+  Serial.begin(RobotConfig::SERIAL_BUAD_RATE);
+  delay(50);
 
-  Wire.begin(RobotConfig::I2C_SDA, RobotConfig::I2C_SCL);
-  Wire.setClock(RobotConfig::WIRE_CLOCK);
+  // Bring up I2C and ToF
+  i2c.begin();
+  tof.begin(i2c);
 
-  tof.setI2CPins(RobotConfig::I2C_SDA, RobotConfig::I2C_SCL);
-  tof.setI2CHz(RobotConfig::WIRE_CLOCK);
-
-  tof.setAutoRecover(RobotConfig::TOF_AUTORECOVERY);
-  tof.setRecoverThreshold(RobotConfig::TOF_RECOVERY_THRESHOLD);
-
-  tof.begin(Wire);
+  // Optional: quick bus sanity check
+  // i2c.scan(Serial);
 }
 
 void loop() {
-  TofReading r;
+  proto.poll();
 
-  if (tof.poll(r)) {
-    Serial.print("tof[");
-    Serial.print(r.id);
-    Serial.print("] ");
-
-    if (r.status == 0) {
-      Serial.print(r.mm);
-      Serial.print(" mm");
-    } else {
-      Serial.print("ERROR status=");
-      Serial.print(r.status);
-    }
-
-    Serial.print("  ts=");
-    Serial.print(r.ts_ms);
-    Serial.println();
+  if (tof.poll()) {
+    tof.publish(proto);
   }
 }

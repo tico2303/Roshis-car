@@ -1,5 +1,6 @@
-// tof_manager.cpp  (UPDATED)
+//tof_manager.cpp
 #include "tof_manager.h"
+#include "protocol.h"  // for Protocol::sendTof
 
 TofManager::TofManager(const TofConfig* cfg, size_t count)
 : _cfg(cfg), _count(count) {}
@@ -11,21 +12,20 @@ void TofManager::allShutdown() {
   }
 }
 
-bool TofManager::begin(TwoWire& wire) {
-  _wire = &wire;
+bool TofManager::begin(I2CBus& bus) {
+  _bus = &bus;
 
-  // Allocate slots once
   if (_slots == nullptr) {
     _slots = new Slot[_count];
   }
 
-  // Copy configs into slots
   for (size_t i = 0; i < _count; i++) {
     _slots[i].cfg = _cfg[i];
     _slots[i].ok = false;
   }
 
-  // Reset all sensors, then init sequentially so we can assign unique addresses
+  _bus->begin();
+
   allShutdown();
   delay(10);
 
@@ -37,7 +37,19 @@ bool TofManager::begin(TwoWire& wire) {
   _rr = 0;
   _consecutiveErrors = 0;
 
-  // true if at least one sensor came up
+  _hasLast = false;
+  _lastPublished = true;
+
+  return ok();
+}
+
+void TofManager::end() {
+  allShutdown();
+  // Note: We do NOT end() the I2C bus here; bus is shared by many sensors.
+}
+
+bool TofManager::ok() const {
+  if (_count == 0 || _slots == nullptr) return false;
   for (size_t i = 0; i < _count; i++) {
     if (_slots[i].ok) return true;
   }
@@ -47,79 +59,42 @@ bool TofManager::begin(TwoWire& wire) {
 bool TofManager::initSlot(size_t i) {
   Slot& s = _slots[i];
 
-  // Enable this sensor
   digitalWrite(s.cfg.xshutPin, HIGH);
   delay(10);
 
   s.sensor.setTimeout(50);
 
-  // init() expects device at default address
+  // If your VL53L0X library supports injecting TwoWire, do it here.
+  // Otherwise it uses global Wire which your I2CBus config has already set up.
   if (!s.sensor.init()) {
     return false;
   }
 
-  // Assign unique address so other sensors can coexist on the bus
   s.sensor.setAddress(s.cfg.addr);
-
-  // Start continuous ranging
   s.sensor.startContinuous();
   return true;
 }
 
-void TofManager::busClear() {
-  if (!_hasPins) return;
+bool TofManager::recover_() {
+  if (!_bus) return false;
 
-  // Pulse SCL until SDA releases (up to 9 pulses). Helps if SDA is stuck low.
-  pinMode(_sdaPin, INPUT_PULLUP);
-  pinMode(_sclPin, OUTPUT_OPEN_DRAIN);
-  digitalWrite(_sclPin, HIGH);
-  delayMicroseconds(5);
-
-  for (int i = 0; i < 9; i++) {
-    if (digitalRead(_sdaPin) == HIGH) break;
-    digitalWrite(_sclPin, LOW);
-    delayMicroseconds(5);
-    digitalWrite(_sclPin, HIGH);
-    delayMicroseconds(5);
-  }
-}
-
-bool TofManager::recover() {
   uint32_t now = millis();
-  if (now - _lastRecoverMs < _recoverCooldownMs) {
-    return false; // cooldown: avoid thrashing
-  }
+  if (now - _lastRecoverMs < _recoverCooldownMs) return false;
   _lastRecoverMs = now;
 
-  // Put sensors in reset so they stop holding the bus
   allShutdown();
   delay(10);
 
-  if (_wire) {
-    _wire->end();
-    delay(20);
-  }
-
-  // Attempt to clear a stuck bus (SDA held low)
-  busClear();
-
-  // Restart I2C
-  if (_wire) {
-    if (_hasPins) {
-      _wire->begin(_sdaPin, _sclPin);
-    } else {
-      _wire->begin();
-    }
-    _wire->setClock(_i2cHz);
-  }
+  _bus->recover();
   delay(20);
 
-  // Re-init sensors (reassign addresses)
-  bool ok = begin(*_wire);
-  return ok;
+  // Re-init sensors and reassign addresses
+  return begin(*_bus);
 }
 
-bool TofManager::poll(TofReading& out) {
+bool TofManager::poll() {
+  if (!ok()) return false;
+
   uint32_t now = millis();
   if ((int32_t)(now - _nextDueMs) < 0) return false;
   _nextDueMs = now + _periodMs;
@@ -134,32 +109,42 @@ bool TofManager::poll(TofReading& out) {
     uint16_t mm = s.sensor.readRangeContinuousMillimeters();
     bool timeout = s.sensor.timeoutOccurred();
 
-    out.id = (uint8_t)idx;
-    out.ts_ms = now;
+    _last.id = (uint8_t)idx;
+    _last.ts_ms = now;
 
     if (timeout) {
-      out.mm = -1;
-      out.status = TOF_STATUS_TIMEOUT;
+      _last.mm = -1;
+      _last.status = TOF_STATUS_TIMEOUT;
       _consecutiveErrors++;
-    }
-    else if (mm == 0xFFFF) { //treat sentinel as invalid
-      out.mm = -1;
-      out.status = TOF_STATUS_INVALID;
+    } else if (mm == 0xFFFF) {
+      _last.mm = -1;
+      _last.status = TOF_STATUS_INVALID;
       _consecutiveErrors++;
-    }
-    else {
-      out.mm = (int32_t)mm;
-      out.status = TOF_STATUS_OK;
+    } else {
+      _last.mm = (int32_t)mm;
+      _last.status = TOF_STATUS_OK;
       _consecutiveErrors = 0;
     }
+
+    _hasLast = true;
+    _lastPublished = false;
 
     if (_autoRecover && _consecutiveErrors >= _recoverThreshold) {
       _consecutiveErrors = 0;
-      recover();
+      recover_();
     }
 
     return true;
   }
 
   return false;
+}
+
+bool TofManager::publish(Protocol& proto) {
+  if (!_hasLast) return false;
+  if (_lastPublished) return false;
+
+  proto.sendTof(_last);
+  _lastPublished = true;
+  return true;
 }

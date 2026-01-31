@@ -45,9 +45,13 @@ namespace RobotConfig {
   const gpio_num_t BUMPER_PIN = GPIO_NUM_15;
   const bool BUMPER_ACTIVE_LOW = false;
 
+   // -------------------- I2C Bus --------------------
+  const I2CBusConfig I2C(&Wire, 21, 22, 100000, true);
+
+
   // -------------------- TOF --------------------
   const TofConfig TOF_CFG[] = {
-    { .xshutPin = 25, .addr = 0x30 }
+    { .xshutPin = 35, .addr = 0x29 }
   };
 
 
@@ -66,7 +70,7 @@ namespace RobotConfig {
 
   // -------------------- Feeder --------------------
   const FeederConfig feederConfig = {
-    22,
+    16,//signal pin
     10,
     45,
     50,

@@ -1,0 +1,18 @@
+sllidar:
+  ros__parameters:
+    # Connection
+    channel_type: "serial"         # serial | tcp 
+    serial_port: "/dev/ttyUSB0"
+    serial_baudrate: 460800        # C1M1  uses 460800
+
+    # Frames
+    frame_id: "laser"
+
+    # Driver behavior
+    inverted: false
+    angle_compensate: true
+
+    # lidar-model dependent
+    scan_mode: ""                  # e.g. "Standard" / "Boost" / etc. (model-dependent)
+
+    use_sim_time: false

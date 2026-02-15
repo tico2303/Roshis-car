@@ -71,6 +71,11 @@ const bool INVERT_LEFT_ENCODER = false;
 const bool INVERT_RIGHT_MOTOR = true;
 const bool INVERT_RIGHT_ENCODER = true;
 
+  // -------------------- DriveBase tuning --------------------
+  // 11 PPR encoder * 30:1 gear ratio * 2 (half-quad) = 660
+  const float PULSES_PER_WHEEL_REV = 660.0f;
+  const uint32_t CONTROL_PERIOD_MS = 20;
+
   // -------------------- Protocol --------------------
   const int THR_SIGN = +1;
   const int STR_SIGN = +1;

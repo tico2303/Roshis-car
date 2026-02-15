@@ -1,30 +1,22 @@
-#include <Arduino.h>
-#include "protocol.h"
-#include "drivetrain.h"
-#include "robot_config.h"
-#include <Bounce2.h>
-#include "feeder.h"
-#include "utils.h"
 // ------------------------------------------------------------
 // main.cpp
 //
-// Final (for now): ESP32 listens for newline-delimited JSON protocol messages
-// on Serial and drives the robot using DriveTrain.
+// ESP32 firmware for DARO robot.
+// Listens for drv2 commands (differential drive) from Pi via NDJSON serial.
+// Publishes encoder telemetry back to Pi for ROS2 odometry.
 //
-// Currently implemented:
-//   - onDrive callback
-//   - onFeed callback
-//
-//   - If no drive command is received for DRIVE_TIMEOUT_MS, motors stop.
+// Protocol messages:
+//   Inbound:  {"type":"drv2","left":-1.0..1.0,"right":-1.0..1.0}
+//   Outbound: {"type":"enc","t_ms":...,"left":{...},"right":{...}}
 // ------------------------------------------------------------
 
 #include <Arduino.h>
 
 #include "robot_config.h"
 #include "protocol.h"
-#include "drivetrain.h"
+#include "motor.h"
+#include "drivebase.h"
 #include "feeder.h"
-#include "utils.h"
 
 #include "i2c_bus.h"
 #include "i2c_sensor.h"
@@ -34,58 +26,44 @@
 
 // -------------------- Core subsystems --------------------
 
-// Build drivetrain from centralized config
-static DriveTrain drive(RobotConfig::driveTrainPins());
+static Motor leftMotor;
+static Motor rightMotor;
+static DriveBase drive(leftMotor, rightMotor);
 
-// Protocol runs on the hardware serial port
 static Protocol proto(Serial);
 
-// Controls feeder servo
 static Feeder feeder(RobotConfig::feederConfig);
-
-// Utilities
-static Utils utils;
 
 // -------------------- I2C + Sensors --------------------
 
 static I2CBus i2c(RobotConfig::I2C);
 
-// I2C sensors
 static TofManager tof(RobotConfig::TOF_CFG, RobotConfig::TOF_CFG_COUNT);
 
-// Registry for easy future expansion
 static I2CSensor* i2cSensors[] = {
   &tof,
   // &imu,
   // &ina226,
-  // &oled,
 };
 
 static constexpr size_t I2C_SENSOR_COUNT =
   sizeof(i2cSensors) / sizeof(i2cSensors[0]);
 
-// Sensor polling cadence
 static constexpr uint32_t SENSOR_POLL_PERIOD_MS = 10;
 static uint32_t nextSensorMs = 0;
 
-// -------------------- Drive failsafe --------------------
+// -------------------- Control loop timing --------------------
 
-static constexpr uint32_t DRIVE_TIMEOUT_MS = 500;
-static volatile uint32_t lastDriveMs = 0;
+static uint32_t lastUpdateMs = 0;
 
-// -------------------- Protocol callback: onDrive --------------------
+// -------------------- Protocol callback: drv2 --------------------
 
-static void handleDrive(uint32_t seq, const Protocol::DriveCmd& cmd) {
+static void handleDrive2(uint32_t seq, const Protocol::Drive2Cmd& cmd) {
   (void)seq;
-
-  lastDriveMs = millis();
-
-  const int throttle =
-    RobotConfig::THR_SIGN * utils.map100To255(cmd.thr);
-  const int steer =
-    RobotConfig::STR_SIGN * utils.map100To255(cmd.str);
-
-  drive.arcadeDrive(throttle, steer);
+  DriveCommand dcmd;
+  dcmd.left_u  = cmd.left_u;
+  dcmd.right_u = cmd.right_u;
+  drive.setCommand(dcmd, millis());
 }
 
 // -------------------- Bumper switch --------------------
@@ -112,24 +90,20 @@ static void updateBumper() {
   lastBumperPressed = pressed;
   proto.sendSensorBool("bumper", pressed, millis());
 
-  Serial.println("Hit bumper!");
-
   if (STOP_ON_BUMPER && pressed) {
-    drive.stop();
+    DriveCommand stop{};
+    drive.setCommand(stop, millis());
   }
 }
 
-// -------------------- Protocol callback: onFeed --------------------
+// -------------------- Protocol callback: feed --------------------
 
 static void handleFeed(uint32_t seq, const Protocol::FeedCmd& cmd) {
   (void)seq;
 
   if (cmd.open) {
-    Serial.print("[FEED] open ms=");
-    Serial.println(cmd.ms);
     feeder.open(cmd.ms);
   } else {
-    Serial.println("[FEED] close");
     feeder.close();
   }
 
@@ -142,22 +116,25 @@ void setup() {
   Serial.begin(RobotConfig::SERIAL_BUAD_RATE);
   delay(500);
 
-  // ---- Drivetrain ----
-  drive.setMaxSpeed(RobotConfig::MAX_SPEED);
-  drive.setDeadband(RobotConfig::DEADBAND);
-  drive.setPwmFrequency(RobotConfig::PWM_FREQ_HZ);
-  drive.begin();
+  // ---- DriveBase ----
+  leftMotor.begin(
+    RobotConfig::LEFT_PINS, RobotConfig::LEFT_PWM,
+    RobotConfig::INVERT_LEFT_MOTOR, RobotConfig::INVERT_LEFT_ENCODER);
+  rightMotor.begin(
+    RobotConfig::RIGHT_PINS, RobotConfig::RIGHT_PWM,
+    RobotConfig::INVERT_RIGHT_MOTOR, RobotConfig::INVERT_RIGHT_ENCODER);
+
+  leftMotor.setPulsesPerWheelRev(RobotConfig::PULSES_PER_WHEEL_REV);
+  rightMotor.setPulsesPerWheelRev(RobotConfig::PULSES_PER_WHEEL_REV);
 
   // ---- Feeder ----
   //feeder.begin();
 
   // ---- Protocol callbacks ----
   Protocol::Callbacks cb;
-  cb.onDrive = handleDrive;
-  cb.onFeed  = handleFeed;
+  cb.onDrive2 = handleDrive2;
+  cb.onFeed   = handleFeed;
   proto.setCallbacks(cb);
-
-  lastDriveMs = millis();
 
   // ---- I2C bring-up ----
   if (!i2c.begin()) {
@@ -166,10 +143,6 @@ void setup() {
     Serial.println("[I2C] begin OK");
   }
 
-  // Optional sanity scan
-  // i2c.scan(Serial);
-
-  // ---- Begin I2C sensors ----
   for (size_t i = 0; i < I2C_SENSOR_COUNT; i++) {
     I2CSensor* s = i2cSensors[i];
     Serial.print("[I2C] begin ");
@@ -183,6 +156,7 @@ void setup() {
 
   setupBumper();
 
+  lastUpdateMs = millis();
 }
 
 // -------------------- loop() --------------------
@@ -192,9 +166,13 @@ void loop() {
 
   const uint32_t now = millis();
 
-  // Drive failsafe
-  if ((now - lastDriveMs) > DRIVE_TIMEOUT_MS) {
-    drive.stop();
+  // ---- DriveBase control loop (20ms / 50Hz) ----
+  if (now - lastUpdateMs >= RobotConfig::CONTROL_PERIOD_MS) {
+    const float dt = (now - lastUpdateMs) / 1000.0f;
+    lastUpdateMs = now;
+
+    drive.update(now, dt);
+    proto.sendDriveTelemetry(drive.telemetry());
   }
 
   updateBumper();

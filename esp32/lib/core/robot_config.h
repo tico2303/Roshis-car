@@ -74,6 +74,10 @@ namespace RobotConfig {
   extern const bool INVERT_LEFT_ENCODER;
   extern const bool INVERT_RIGHT_ENCODER;
 
+  //--------- DriveBase tuning ----------
+  extern const float PULSES_PER_WHEEL_REV;
+  extern const uint32_t CONTROL_PERIOD_MS;
+
 
   // -------------------- Protocol --------------------
   extern const int THR_SIGN;

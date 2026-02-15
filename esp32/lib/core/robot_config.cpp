@@ -6,6 +6,7 @@ namespace RobotConfig {
   const int SERIAL_BUAD_RATE = 115200;
 
   // -------------------- Drivetrain --------------------
+  /*
   const uint8_t FL_A = 33;
   const uint8_t FL_B = 32;
 
@@ -36,6 +37,44 @@ namespace RobotConfig {
       DriveTrain::MotorPins(RR_A, RR_B, INVERT_RR)
     );
   }
+  */
+const MotorPins LEFT_PINS = {
+  .in1 = 25,
+  .in2 = 26,
+  .encA = 32,
+  .encB = 33
+};
+
+const MotorPwmConfig LEFT_PWM = {
+  .ch_in1 = 0,
+  .ch_in2 = 1,
+  .freq_hz = 20000,
+  .res_bits = 8
+};
+
+const MotorPins RIGHT_PINS ={
+  .in1 = 27,
+  .in2 = 14,
+  .encA = 19,
+  .encB = 18
+};
+
+const MotorPwmConfig RIGHT_PWM = {
+  .ch_in1 = 2,
+  .ch_in2 = 3,
+  .freq_hz = 20000,
+  .res_bits = 8
+};
+
+const bool INVERT_LEFT_MOTOR = false;
+const bool INVERT_LEFT_ENCODER = false;
+const bool INVERT_RIGHT_MOTOR = true;
+const bool INVERT_RIGHT_ENCODER = true;
+
+  // -------------------- DriveBase tuning --------------------
+  // 11 PPR encoder * 30:1 gear ratio * 2 (half-quad) = 660
+  const float PULSES_PER_WHEEL_REV = 660.0f;
+  const uint32_t CONTROL_PERIOD_MS = 20;
 
   // -------------------- Protocol --------------------
   const int THR_SIGN = +1;
@@ -78,3 +117,33 @@ namespace RobotConfig {
     2500
   };
 }
+
+// ----- LEDC PWM -----
+inline constexpr uint32_t PWM_FREQ_HZ = 20000;
+inline constexpr uint8_t  PWM_BITS    = 10;
+inline constexpr uint16_t PWM_MAX     = (1u << PWM_BITS) - 1;
+
+inline constexpr int LEFT_PWM_CH1  = 0;
+inline constexpr int LEFT_PWM_CH2  = 1;
+inline constexpr int RIGHT_PWM_CH1 = 2;
+inline constexpr int RIGHT_PWM_CH2 = 3;
+
+// ----- Encoders  pulse counts-----
+inline constexpr int LEFT_PCNT_UNIT  = 0;
+inline constexpr int RIGHT_PCNT_UNIT = 1;
+
+// Encoder model params (tune these)
+inline constexpr int32_t ENCODER_PPR = 11;     // pulses per motor shaft rev
+inline constexpr float   GEAR_RATIO  = 30.0f;  // motor revs per wheel rev
+
+inline constexpr int32_t QUAD_FACTOR = 2;
+
+inline constexpr float PULSES_PER_WHEEL_REV =
+  (float)ENCODER_PPR * GEAR_RATIO * (float)QUAD_FACTOR;
+
+// ----- Robot mapping -----
+inline constexpr float MAX_NORM_THR = 1000.0f; // if thr is -1000..1000 (adjust to your Pi)
+inline constexpr float MAX_NORM_STR = 1000.0f;
+
+inline constexpr uint32_t CONTROL_PERIOD_MS  = 20;
+inline constexpr uint32_t COMMAND_TIMEOUT_MS = 250;

@@ -3,6 +3,7 @@
 #include "drivetrain.h"
 #include "configs.h"
 #include <Wire.h>
+#include "motor.h"
 /*
 ====================== ESP32 PIN MAP (DARO) ======================
 
@@ -62,6 +63,21 @@ namespace RobotConfig {
   extern const uint32_t PWM_FREQ_HZ;
 
   DriveTrain::DriveTrainPins driveTrainPins();
+
+  //--------- Motor configs ----------
+  extern const MotorPins LEFT_PINS;
+  extern const MotorPins RIGHT_PINS;
+  extern const MotorPwmConfig RIGHT_PWM;
+  extern const MotorPwmConfig LEFT_PWM;
+  extern const bool INVERT_LEFT_MOTOR;
+  extern const bool INVERT_RIGHT_MOTOR;
+  extern const bool INVERT_LEFT_ENCODER;
+  extern const bool INVERT_RIGHT_ENCODER;
+
+  //--------- DriveBase tuning ----------
+  extern const float PULSES_PER_WHEEL_REV;
+  extern const uint32_t CONTROL_PERIOD_MS;
+
 
   // -------------------- Protocol --------------------
   extern const int THR_SIGN;

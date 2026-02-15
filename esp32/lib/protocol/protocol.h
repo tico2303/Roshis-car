@@ -2,6 +2,8 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "tof/tof_manager.h"
+
+struct DriveTelemetry;  // forward decl (defined in drivebase.h)
 /**
  * Robot Serial Protocol (newline-delimited JSON).
  *
@@ -22,6 +24,11 @@ public:
       uint32_t ms;     // optional duration (for open)
     };
 
+  struct Drive2Cmd {
+    float left_u;    // normalized -1.0..1.0
+    float right_u;   // normalized -1.0..1.0
+  };
+
   // Extend Commands here
 
   
@@ -40,6 +47,9 @@ public:
     void (*onMode)(uint32_t seq, const char* modeName) = nullptr;
     // Called when feeder command is requested
     void (*onFeed)(uint32_t seq, const FeedCmd& cmd) = nullptr;
+
+    // Called when differential drive command is received.
+    void (*onDrive2)(uint32_t seq, const Drive2Cmd& cmd) = nullptr;
   };
 
   explicit Protocol(Stream& serial);
@@ -61,6 +71,9 @@ public:
   void sendErr(const char* msg, uint32_t seq = 0, const char* detail = nullptr, const char* got = nullptr);
   //Time of Flight sensor
   void sendTof(const TofReading& r);
+
+  // Encoder telemetry (DriveBase -> Pi for SLAM/odometry)
+  void sendDriveTelemetry(const DriveTelemetry& tel);
 
   // Send sensor data (ESP32 -> Pi)
   void sendSensorBool(const char* key, bool value, uint32_t t_ms = 0);
@@ -94,6 +107,7 @@ private:
   void onDrv(JsonDocument& doc);
   void onMode(JsonDocument& doc);
   void onFeed(JsonDocument& doc);
+  void onDrv2(JsonDocument& doc);
 
   uint32_t _txSeq = 1;
 };

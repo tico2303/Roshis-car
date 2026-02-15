@@ -1,4 +1,5 @@
 #include "protocol.h"
+#include "drivebase.h"
 
 namespace {
   // Small helper: safe string extraction
@@ -128,7 +129,8 @@ void Protocol::dispatch(JsonDocument& doc) {
     {"ping",  &Protocol::onPing},
     {"drv",   &Protocol::onDrv},
     {"mode",  &Protocol::onMode},
-    {"feed", &Protocol::onFeed}
+    {"feed", &Protocol::onFeed},
+    {"drv2", &Protocol::onDrv2}
   };
 
   for (const auto& e : kTable) {
@@ -209,6 +211,37 @@ void Protocol::onFeed(JsonDocument& doc) {
   // Always ACK if command was valid
   sendAck(seq, "feed");
 }
+void Protocol::onDrv2(JsonDocument& doc) {
+  uint32_t seq = doc["seq"] | 0;
+
+  Drive2Cmd cmd;
+  cmd.left_u  = doc["left"]  | 0.0f;
+  cmd.right_u = doc["right"] | 0.0f;
+
+  if (_cb.onDrive2) _cb.onDrive2(seq, cmd);
+
+  sendAck(seq, "drv2");
+}
+
+void Protocol::sendDriveTelemetry(const DriveTelemetry& tel) {
+  JsonDocument doc;
+  doc["type"]  = "enc";
+  doc["seq"]   = _txSeq++;
+  doc["t_ms"]  = tel.t_ms;
+
+  JsonObject left  = doc["left"].to<JsonObject>();
+  left["dt"]    = tel.left.dticks;
+  left["tot"]   = (long long)tel.left.ticks_total;
+  left["rad_s"] = tel.left.wheel_rad_s;
+
+  JsonObject right = doc["right"].to<JsonObject>();
+  right["dt"]    = tel.right.dticks;
+  right["tot"]   = (long long)tel.right.ticks_total;
+  right["rad_s"] = tel.right.wheel_rad_s;
+
+  sendJson(doc);
+}
+
 void Protocol::sendTof(const TofReading& r) {
   JsonDocument doc;             
   doc["type"]   = "tof";

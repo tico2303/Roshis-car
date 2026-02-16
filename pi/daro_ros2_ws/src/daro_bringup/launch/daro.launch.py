@@ -87,6 +87,24 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", log_level],
     )
 
+    imu_json_node = Node(
+        package="daro_sensors",
+        executable="imu_json",
+        name="imu_json_node",
+        output="screen",
+        parameters=[params_file],
+        arguments=["--ros-args", "--log-level", log_level],
+    )
+
+    enc_json_node = Node(
+        package="daro_sensors",
+        executable="enc_json",
+        name="enc_json_node",
+        output="screen",
+        parameters=[params_file],
+        arguments=["--ros-args", "--log-level", log_level],
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             "log_level",
@@ -117,4 +135,6 @@ def generate_launch_description():
         joy_buttons_node,
         twist_to_drv_node,
         tof_to_range_node,
+        imu_json_node,
+        enc_json_node,
     ])

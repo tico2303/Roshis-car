@@ -3,33 +3,26 @@ twist_to_drv:
     cmd_vel_topic: "/cmd_vel"
     tx_topic: "/esp32/tx_json"
 
-    # reduce throttle getting OCP
-    # TODO: debug ocp issues
-    thr_max: 80
-    str_max: 100
-
     linear_x_scale: 1.0
     angular_z_scale: 1.0
 
-    deadband_thr: 3
-    deadband_str: 3
+    # minimum wheel command magnitude (normalized 0..1)
+    deadband: 0.03
 
     cmd_timeout_s: 0.05
     publish_hz: 50.0
 
-    thr_sign: 1
-    str_sign: -1
+    linear_sign: 1
+    angular_sign: -1
 
-    #slew params to prevent current draw on sudden direction changes
-    # higher the value the faster the response
-    thr_slew_up: 200.0
-    thr_slew_down: 400.0
-    thr_slew_reverse: 150.0
-    # how long to stop between changing directions
-    reverse_brake_ms: 40
+    # Left wheel slew (normalized units/sec, range is -1.0 to 1.0)
+    left_slew_up: 3.0
+    left_slew_down: 6.0
+    left_slew_reverse: 2.0
+    left_reverse_brake_ms: 40
 
-    #Steering slew limiting
-    str_slew_up: 200.0
-    str_slew_down: 400.0
-    str_slew_reverse: 150.0
-    str_reverse_brake_ms: 40
+    # Right wheel slew
+    right_slew_up: 3.0
+    right_slew_down: 6.0
+    right_slew_reverse: 2.0
+    right_reverse_brake_ms: 40

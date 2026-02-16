@@ -21,6 +21,7 @@
 #include "i2c_bus.h"
 #include "i2c_sensor.h"
 #include "tof/tof_manager.h"
+#include "bmi160_imu.h"
 
 #include <Bounce2.h>
 
@@ -39,10 +40,11 @@ static Feeder feeder(RobotConfig::feederConfig);
 static I2CBus i2c(RobotConfig::I2C);
 
 static TofManager tof(RobotConfig::TOF_CFG, RobotConfig::TOF_CFG_COUNT);
+static Bmi160Imu imu;
 
 static I2CSensor* i2cSensors[] = {
   &tof,
-  // &imu,
+  &imu,
   // &ina226,
 };
 

@@ -22,6 +22,11 @@ SENSORS
   - XSHUT : GPIO 35 is input-only
   - I2C   : SDA 21 / SCL 22
 
+- BMI160 IMU
+  - I2C   : SDA 21 / SCL 22 
+  // SAO->GND: addr 0x68, SAO->3v3: addr 0x69
+  // CS pin to 3.3v to enable I2C mode
+
 - Bumper Switch
   - GPIO 15 (active-low, INPUT_PULLUP)
 

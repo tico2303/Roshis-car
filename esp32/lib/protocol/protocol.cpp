@@ -14,35 +14,37 @@ Protocol::Protocol(Stream& serial)
   _lineBuf[0] = '\0';
 }
 
-// CRC-8/MAXIM (polynomial 0x31, init 0x00)
-static uint8_t crc8(const uint8_t* data, size_t len) {
-  uint8_t crc = 0x00;
+// CRC-16/XMODEM (polynomial 0x1021, init 0x0000)
+static uint16_t crc16(const uint8_t* data, size_t len) {
+  uint16_t crc = 0x0000;
   for (size_t i = 0; i < len; i++) {
-    crc ^= data[i];
+    crc ^= (uint16_t)data[i] << 8;
     for (uint8_t bit = 0; bit < 8; bit++) {
-      crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : (crc << 1);
+      crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
     }
   }
   return crc;
 }
 
 void Protocol::sendJson(const JsonDocument& doc) {
-  // Serialize JSON to buffer, append \tXX checksum, then \n.
-  // Format: <json>\t<2-hex-digit-CRC8>\n
+  // Serialize JSON to buffer, append \tXXXX checksum, then \n.
+  // Format: <json>\t<4-hex-digit-CRC16>\n
   // The bridge verifies the CRC and silently drops corrupted lines.
   char buf[520];
   size_t n = serializeJson(doc, buf, 510);
   if (n == 0 || n >= 510) return;  // shouldn't happen
 
-  uint8_t c = crc8((const uint8_t*)buf, n);
-  // Append \tXX\n
+  uint16_t c = crc16((const uint8_t*)buf, n);
+  // Append \tXXXX\n  (4 hex digits)
   buf[n]     = '\t';
-  buf[n + 1] = "0123456789abcdef"[c >> 4];
-  buf[n + 2] = "0123456789abcdef"[c & 0x0f];
-  buf[n + 3] = '\n';
+  buf[n + 1] = "0123456789abcdef"[(c >> 12) & 0x0f];
+  buf[n + 2] = "0123456789abcdef"[(c >>  8) & 0x0f];
+  buf[n + 3] = "0123456789abcdef"[(c >>  4) & 0x0f];
+  buf[n + 4] = "0123456789abcdef"[ c        & 0x0f];
+  buf[n + 5] = '\n';
 
   _serial.flush();
-  _serial.write(buf, n + 4);
+  _serial.write(buf, n + 6);
   _serial.flush();
 }
 
@@ -131,12 +133,12 @@ void Protocol::handleLine(const char* line) {
   // If present, verify CRC and strip before parsing.
   const char* tab = strrchr(line, '\t');
   char clean[LINE_BUF];
-  if (tab && (strlen(tab + 1) == 2)) {
+  if (tab && (strlen(tab + 1) == 4)) {
     size_t jsonLen = tab - line;
     if (jsonLen >= LINE_BUF) { sendErr("line_too_long"); return; }
-    // Verify CRC
-    uint8_t expected = (uint8_t)strtol(tab + 1, nullptr, 16);
-    uint8_t actual = crc8((const uint8_t*)line, jsonLen);
+    // Verify CRC-16
+    uint16_t expected = (uint16_t)strtol(tab + 1, nullptr, 16);
+    uint16_t actual = crc16((const uint8_t*)line, jsonLen);
     if (actual != expected) return;  // silently drop corrupted
     memcpy(clean, line, jsonLen);
     clean[jsonLen] = '\0';

@@ -16,13 +16,13 @@ import serial
 _TYPE_SAFE_RE = re.compile(r"[^a-z0-9_]+")
 
 
-def _crc8(data: bytes) -> int:
-    """CRC-8/MAXIM (poly 0x31, init 0x00) — matches ESP32 sendJson."""
-    crc = 0x00
+def _crc16(data: bytes) -> int:
+    """CRC-16/XMODEM (poly 0x1021, init 0x0000) — matches ESP32 sendJson."""
+    crc = 0x0000
     for b in data:
-        crc ^= b
+        crc ^= b << 8
         for _ in range(8):
-            crc = ((crc << 1) ^ 0x31) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
     return crc
 
 
@@ -172,8 +172,8 @@ class NdjsonBridgeNode(Node):
             return
 
         compact = json.dumps(obj, separators=(",", ":"))
-        crc = _crc8(compact.encode("utf-8"))
-        line = f"{compact}\t{crc:02x}\n"
+        crc = _crc16(compact.encode("utf-8"))
+        line = f"{compact}\t{crc:04x}\n"
         try:
             ser.write(line.encode("utf-8"))
         except Exception as e:
@@ -294,7 +294,7 @@ class NdjsonBridgeNode(Node):
         except ValueError:
             self._crc_drop_count += 1
             return
-        actual = _crc8(json_part)
+        actual = _crc16(json_part)
         if actual != expected:
             self._crc_drop_count += 1
             return

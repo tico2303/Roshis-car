@@ -43,9 +43,7 @@ void Protocol::sendJson(const JsonDocument& doc) {
   buf[n + 4] = "0123456789abcdef"[ c        & 0x0f];
   buf[n + 5] = '\n';
 
-  _serial.flush();
   _serial.write(buf, n + 6);
-  _serial.flush();
 }
 
 void Protocol::sendHelloAck(uint32_t seq) {

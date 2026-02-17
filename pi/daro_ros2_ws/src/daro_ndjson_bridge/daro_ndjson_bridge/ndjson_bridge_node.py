@@ -16,6 +16,16 @@ import serial
 _TYPE_SAFE_RE = re.compile(r"[^a-z0-9_]+")
 
 
+def _crc8(data: bytes) -> int:
+    """CRC-8/MAXIM (poly 0x31, init 0x00) — matches ESP32 sendJson."""
+    crc = 0x00
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x31) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
+
 def sanitize_type(t: str) -> str:
     """
     ROS topic segments should be conservative.
@@ -87,6 +97,10 @@ class NdjsonBridgeNode(Node):
         self._rx_buf = bytearray()
         self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
 
+        # CRC drop stats — logged periodically so you can monitor link quality
+        self._crc_drop_count = 0
+        self._crc_log_timer = self.create_timer(10.0, self._log_crc_stats)
+
         self._connect()
         self._rx_thread.start()
 
@@ -157,7 +171,9 @@ class NdjsonBridgeNode(Node):
         if ser is None:
             return
 
-        line = json.dumps(obj, separators=(",", ":")) + "\n"
+        compact = json.dumps(obj, separators=(",", ":"))
+        crc = _crc8(compact.encode("utf-8"))
+        line = f"{compact}\t{crc:02x}\n"
         try:
             ser.write(line.encode("utf-8"))
         except Exception as e:
@@ -257,7 +273,30 @@ class NdjsonBridgeNode(Node):
                 time.sleep(0.05)
 
     def _process_rx_line(self, line: bytes) -> None:
-        """Parse one complete NDJSON line and publish to ROS topics."""
+        """Parse one complete NDJSON line and publish to ROS topics.
+
+        Expected wire format: <json>\\t<2-hex-CRC8>
+        If a tab is present the CRC is verified; corrupted lines are
+        silently dropped.  Lines without a tab are treated as legacy
+        (no checksum) and parsed directly.
+        """
+        # --- CRC verification ---
+        tab_idx = line.rfind(b"\t")
+        if tab_idx >= 0:
+            json_part = line[:tab_idx]
+            crc_hex = line[tab_idx + 1:]
+            try:
+                expected = int(crc_hex, 16)
+            except ValueError:
+                # Tab present but CRC not parseable — corrupted
+                self._crc_drop_count += 1
+                return
+            actual = _crc8(json_part)
+            if actual != expected:
+                self._crc_drop_count += 1
+                return
+            line = json_part
+
         try:
             obj = json.loads(line.decode("utf-8", errors="replace"))
             if not isinstance(obj, dict):
@@ -290,6 +329,13 @@ class NdjsonBridgeNode(Node):
             m = String()
             m.data = payload
             pub.publish(m)
+
+    def _log_crc_stats(self) -> None:
+        if self._crc_drop_count > 0:
+            self.get_logger().info(
+                f"CRC: dropped {self._crc_drop_count} corrupted lines in last 10s"
+            )
+            self._crc_drop_count = 0
 
     def destroy_node(self) -> bool:
         self._stop.set()

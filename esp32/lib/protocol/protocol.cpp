@@ -14,26 +14,35 @@ Protocol::Protocol(Stream& serial)
   _lineBuf[0] = '\0';
 }
 
-void Protocol::sendJson(const JsonDocument& doc) {
-  // Serialize to a local buffer first, then write as one atomic chunk.
-  char buf[512];
-  size_t n = serializeJson(doc, buf, sizeof(buf) - 1);
-  if (n >= sizeof(buf) - 1) {
-    // Message too long — fall back to stream (rare)
-    _serial.flush();
-    serializeJson(doc, _serial);
-    _serial.print('\n');
-    _serial.flush();
-    return;
+// CRC-8/MAXIM (polynomial 0x31, init 0x00)
+static uint8_t crc8(const uint8_t* data, size_t len) {
+  uint8_t crc = 0x00;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t bit = 0; bit < 8; bit++) {
+      crc = (crc & 0x80) ? (crc << 1) ^ 0x31 : (crc << 1);
+    }
   }
-  buf[n] = '\n';
+  return crc;
+}
 
-  // Flush before AND after: ensures this message doesn't interleave
-  // with a previous or subsequent message in the UART TX buffer.
-  // Without the post-flush, back-to-back sendJson calls (enc + IMU)
-  // can overflow the 128-byte hardware FIFO and corrupt framing.
+void Protocol::sendJson(const JsonDocument& doc) {
+  // Serialize JSON to buffer, append \tXX checksum, then \n.
+  // Format: <json>\t<2-hex-digit-CRC8>\n
+  // The bridge verifies the CRC and silently drops corrupted lines.
+  char buf[520];
+  size_t n = serializeJson(doc, buf, 510);
+  if (n == 0 || n >= 510) return;  // shouldn't happen
+
+  uint8_t c = crc8((const uint8_t*)buf, n);
+  // Append \tXX\n
+  buf[n]     = '\t';
+  buf[n + 1] = "0123456789abcdef"[c >> 4];
+  buf[n + 2] = "0123456789abcdef"[c & 0x0f];
+  buf[n + 3] = '\n';
+
   _serial.flush();
-  _serial.write(buf, n + 1);
+  _serial.write(buf, n + 4);
   _serial.flush();
 }
 
@@ -118,12 +127,27 @@ void Protocol::poll() {
 }
 
 void Protocol::handleLine(const char* line) {
+  // Check for CRC suffix: <json>\t<XX>
+  // If present, verify CRC and strip before parsing.
+  const char* tab = strrchr(line, '\t');
+  char clean[LINE_BUF];
+  if (tab && (strlen(tab + 1) == 2)) {
+    size_t jsonLen = tab - line;
+    if (jsonLen >= LINE_BUF) { sendErr("line_too_long"); return; }
+    // Verify CRC
+    uint8_t expected = (uint8_t)strtol(tab + 1, nullptr, 16);
+    uint8_t actual = crc8((const uint8_t*)line, jsonLen);
+    if (actual != expected) return;  // silently drop corrupted
+    memcpy(clean, line, jsonLen);
+    clean[jsonLen] = '\0';
+    line = clean;
+  }
+
   // Parse JSON line into a document.
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, line);
 
   if (err) {
-    // Keep detail short; ArduinoJson returns a compact string.
     sendErr("json_parse_failed", 0, err.c_str());
     return;
   }

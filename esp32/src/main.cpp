@@ -60,7 +60,7 @@ static uint32_t lastUpdateMs = 0;
 
 // Encoder telemetry publishes at a slower rate than the control loop
 // to stay within 115200 baud bandwidth (~11,520 bytes/sec).
-static constexpr uint32_t ENC_PUBLISH_PERIOD_MS = 50;  // 20Hz
+static constexpr uint32_t ENC_PUBLISH_PERIOD_MS = 100;  // 10Hz
 static uint32_t lastEncPublishMs = 0;
 
 // -------------------- Protocol callback: drv2 --------------------

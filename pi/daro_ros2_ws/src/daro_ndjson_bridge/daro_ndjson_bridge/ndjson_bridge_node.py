@@ -81,6 +81,10 @@ class NdjsonBridgeNode(Node):
         self._ser_lock = threading.Lock()
         self._ser: Optional[serial.Serial] = None
         self._stop = threading.Event()
+
+        # RX uses a manual byte buffer instead of readline() for
+        # reliable framing even when pyserial returns partial reads.
+        self._rx_buf = bytearray()
         self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
 
         self._connect()
@@ -106,6 +110,9 @@ class NdjsonBridgeNode(Node):
             ser.reset_input_buffer()
             with self._ser_lock:
                 self._ser = ser
+            # Clear the RX line buffer on fresh connection so we don't
+            # try to parse a leftover partial line from a previous session
+            self._rx_buf.clear()
             self.get_logger().info(f"Connected serial: {port} @ {baud}")
         except Exception as e:
             with self._ser_lock:
@@ -164,7 +171,6 @@ class NdjsonBridgeNode(Node):
 
         max_types = int(self.get_parameter("max_dynamic_types").value)
         if len(self._pub_by_type) >= max_types:
-            # Drop new types once limit is reached (prevents runaway topic creation)
             self.get_logger().warn(
                 f"Type publisher limit reached ({max_types}). Dropping new type: {safe_type}"
             )
@@ -177,9 +183,17 @@ class NdjsonBridgeNode(Node):
         return pub
 
     def _rx_loop(self) -> None:
+        """
+        Read bytes from serial into a buffer, extract complete newline-
+        delimited lines, parse as JSON, and publish to ROS topics.
+
+        This approach is resilient to:
+        - Partial reads (pyserial returning fewer bytes than a full line)
+        - The "readiness but no data" transient USB-serial condition
+        - Buffer boundaries falling mid-message
+        """
         reconnect_s = int(self.get_parameter("reconnect_sleep_ms").value) / 1000.0
-        consecutive_errors = 0
-        max_errors_before_reconnect = 5
+        max_buf = 4096  # safety cap — discard buffer if it grows too large
 
         while not self._stop.is_set():
             self._ensure_connected()
@@ -191,73 +205,91 @@ class NdjsonBridgeNode(Node):
                 continue
 
             try:
-                # readline() blocks until \n or timeout.
-                # With a 0.5s timeout, even long NDJSON lines (enc+imu)
-                # have plenty of time to arrive at 115200 baud.
-                raw = ser.readline()
+                # Read whatever bytes are available (up to 512).
+                # This may be a partial line, a full line, or multiple lines.
+                chunk = ser.read(ser.in_waiting or 1)
 
-                if not raw:
-                    # Timeout with no data — this is normal when ESP32
-                    # isn't sending. Do NOT close the port.
+                if not chunk:
+                    # Timeout with no data — normal idle, do NOT reconnect
                     continue
 
-                raw = raw.strip()
-                if not raw:
+                self._rx_buf.extend(chunk)
+
+                # Safety: if buffer grows huge, something is wrong — discard
+                if len(self._rx_buf) > max_buf:
+                    self.get_logger().warn(
+                        f"RX buffer overflow ({len(self._rx_buf)} bytes), discarding"
+                    )
+                    self._rx_buf.clear()
                     continue
 
-                # Reset error counter on any successful read
-                consecutive_errors = 0
+                # Extract and process all complete lines
+                while b"\n" in self._rx_buf:
+                    idx = self._rx_buf.index(b"\n")
+                    line = bytes(self._rx_buf[:idx]).strip()
+                    del self._rx_buf[: idx + 1]
 
-                # Parse JSON object
-                try:
-                    obj = json.loads(raw.decode("utf-8", errors="replace"))
-                    if not isinstance(obj, dict):
-                        raise ValueError("rx must be JSON object")
-                except Exception as e:
-                    if bool(self.get_parameter("log_rx_bad_json").value):
-                        self.get_logger().warn(
-                            f"RX invalid JSON: {e} | {raw[:200]!r}",
-                            throttle_duration_sec=2.0,
-                        )
-                    continue
+                    if not line:
+                        continue
 
-                # Canonical JSON string output
-                payload = json.dumps(obj, separators=(",", ":"))
-
-                # Publish to /all
-                msg_all = String()
-                msg_all.data = payload
-                self.pub_all.publish(msg_all)
-
-                # Publish to /<type>
-                t = obj.get("type")
-                if isinstance(t, str) and t.strip():
-                    safe_t = sanitize_type(t)
-                else:
-                    safe_t = "unknown"
-
-                pub = self._get_or_create_type_pub(safe_t)
-                if pub is not None:
-                    m = String()
-                    m.data = payload
-                    pub.publish(m)
+                    self._process_rx_line(line)
 
             except serial.SerialException as e:
-                consecutive_errors += 1
-                if consecutive_errors >= max_errors_before_reconnect:
-                    self.get_logger().warn(
-                        f"Serial error ({consecutive_errors} consecutive): {e} — reconnecting"
-                    )
-                    self._close_serial()
-                    time.sleep(reconnect_s)
-                    consecutive_errors = 0
+                err_str = str(e)
+                if "returned no data" in err_str or "readiness" in err_str:
+                    # Transient USB-serial glitch — NOT a real disconnect.
+                    # Just retry on next loop iteration.
+                    time.sleep(0.01)
+                    continue
+
+                # Real serial error — reconnect
+                self.get_logger().warn(f"Serial error: {e} — reconnecting")
+                self._close_serial()
+                self._rx_buf.clear()
+                time.sleep(reconnect_s)
             except OSError as e:
                 self.get_logger().warn(f"Serial OS error: {e} — reconnecting")
                 self._close_serial()
+                self._rx_buf.clear()
                 time.sleep(reconnect_s)
             except Exception as e:
                 self.get_logger().warn(f"RX unexpected error: {e}")
                 time.sleep(0.05)
+
+    def _process_rx_line(self, line: bytes) -> None:
+        """Parse one complete NDJSON line and publish to ROS topics."""
+        try:
+            obj = json.loads(line.decode("utf-8", errors="replace"))
+            if not isinstance(obj, dict):
+                raise ValueError("rx must be JSON object")
+        except Exception as e:
+            if bool(self.get_parameter("log_rx_bad_json").value):
+                self.get_logger().warn(
+                    f"RX invalid JSON: {e} | {line[:200]!r}",
+                    throttle_duration_sec=2.0,
+                )
+            return
+
+        # Canonical JSON string output
+        payload = json.dumps(obj, separators=(",", ":"))
+
+        # Publish to /all
+        msg_all = String()
+        msg_all.data = payload
+        self.pub_all.publish(msg_all)
+
+        # Publish to /<type>
+        t = obj.get("type")
+        if isinstance(t, str) and t.strip():
+            safe_t = sanitize_type(t)
+        else:
+            safe_t = "unknown"
+
+        pub = self._get_or_create_type_pub(safe_t)
+        if pub is not None:
+            m = String()
+            m.data = payload
+            pub.publish(m)
 
     def destroy_node(self) -> bool:
         self._stop.set()

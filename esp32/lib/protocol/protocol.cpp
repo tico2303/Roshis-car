@@ -15,8 +15,19 @@ Protocol::Protocol(Stream& serial)
 }
 
 void Protocol::sendJson(const JsonDocument& doc) {
-  serializeJson(doc, _serial);
-  _serial.print('\n');
+  // Serialize to a local buffer and write in one shot.
+  // This avoids interleaving with incoming serial data and
+  // ensures the Pi always sees a complete NDJSON line.
+  char buf[512];
+  size_t n = serializeJson(doc, buf, sizeof(buf) - 1);
+  if (n >= sizeof(buf) - 1) {
+    // Message too long — fall back to stream (rare)
+    serializeJson(doc, _serial);
+    _serial.print('\n');
+    return;
+  }
+  buf[n] = '\n';
+  _serial.write(buf, n + 1);
 }
 
 void Protocol::sendHelloAck(uint32_t seq) {

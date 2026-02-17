@@ -29,7 +29,7 @@ def env_str(name: str, default: str) -> str:
 # Serial / Protocol
 # ============================
 SERIAL_PORT = env_str("SERIAL_PORT", "/dev/ttyUSB0")  # often /dev/ttyACM0 on ESP32
-SERIAL_BAUD = env_int("SERIAL_BAUD", 115200)
+SERIAL_BAUD = env_int("SERIAL_BAUD", 460800)
 SERIAL_TIMEOUT_S = env_float("SERIAL_TIMEOUT_S", 0.05)
 
 LOG_TX = env_bool("LOG_TX", True)

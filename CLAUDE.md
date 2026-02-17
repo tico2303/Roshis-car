@@ -98,8 +98,8 @@ Legacy (pre-ROS2) control layer with direct serial communication. Key modules:
 ## Key Conventions
 
 - **Pin changes**: Always update `esp32/lib/core/robot_config.h` - never hardcode GPIO pins elsewhere
-- **Protocol messages**: JSON with `"type"` field. Drive: `{"type":"drv","thr":-100..100,"str":-100..100}`
-- **Serial baud**: 115200 everywhere
+- **Protocol messages**: JSON with `"type"` field. Drive: `{"type":"drv2","left":-1.0..1.0,"right":-1.0..1.0}`
+- **Serial baud**: 460800. ESP32: `robot_config.cpp` (`SERIAL_BUAD_RATE`). Pi: `daro_bringup/defaults.py` (`BAUD`) — all launch files import from there. Override at runtime: `baud:=921600`
 - **ROS2 domain**: `ROS_DOMAIN_ID=27` with static peer discovery to `192.168.7.74` (Pi IP)
-- **Drive values**: Throttle and steering range from -100 to 100
+- **Drive values**: Differential drive, left/right normalized to -1.0..1.0
 - **Motor drivers**: L9110 (current drivetrain in main.cpp), DRV8871 (newer motor.h with encoders)

@@ -3,7 +3,7 @@
 
 namespace RobotConfig {
 
-  const int SERIAL_BUAD_RATE = 115200;
+  const int SERIAL_BUAD_RATE = 460800;
 
   // -------------------- Drivetrain --------------------
   /*

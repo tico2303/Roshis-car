@@ -6,6 +6,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
+from daro_bringup.defaults import ESP_PORT, BAUD
 
 
 def generate_launch_description():
@@ -26,12 +27,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "esp_port",
-            default_value="/dev/ttyUSB0",
+            default_value=ESP_PORT,
             description="ESP32 serial device (e.g. /dev/ttyUSB0 or /dev/ttyACM0)",
         ),
         DeclareLaunchArgument(
             "baud",
-            default_value="115200",
+            default_value=BAUD,
             description="ESP32 serial baud rate",
         ),
         DeclareLaunchArgument(

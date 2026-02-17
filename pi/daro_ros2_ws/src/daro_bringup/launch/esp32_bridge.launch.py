@@ -4,6 +4,8 @@ from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+from daro_bringup.defaults import ESP_PORT, BAUD
+
 
 def generate_launch_description():
     esp_port = LaunchConfiguration("esp_port")
@@ -14,12 +16,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "esp_port",
-            default_value="/dev/ttyUSB0",
+            default_value=ESP_PORT,
             description="Serial port for ESP32 (e.g. /dev/ttyUSB0, /dev/ttyACM0).",
         ),
         DeclareLaunchArgument(
             "baud",
-            default_value="115200",
+            default_value=BAUD,
             description="ESP32 serial baud rate.",
         ),
         DeclareLaunchArgument(
@@ -35,8 +37,8 @@ def generate_launch_description():
 
         Node(
             package="daro_ndjson_bridge",
-            executable="ndjson_bridge",          
-            name="ndjson_bridge_node",           
+            executable="ndjson_bridge",
+            name="ndjson_bridge_node",
             namespace=namespace,
             output="screen",
 

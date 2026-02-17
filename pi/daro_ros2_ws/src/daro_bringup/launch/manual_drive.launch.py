@@ -4,6 +4,7 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
+from daro_bringup.defaults import BAUD
 import os
 
 
@@ -47,7 +48,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "esp32_baud",
-            default_value="115200",
+            default_value=BAUD,
             description="ESP32 serial baud rate",
         ),
         DeclareLaunchArgument(

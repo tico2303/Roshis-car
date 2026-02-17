@@ -7,6 +7,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
+from daro_bringup.defaults import ESP_PORT, BAUD
 
 
 def generate_launch_description():
@@ -117,15 +118,14 @@ def generate_launch_description():
             description="Path to DARO params YAML",
         ),
 
-        # Keep these as launch args because serial port changes frequently.
         DeclareLaunchArgument(
             "esp_port",
-            default_value="/dev/ttyUSB0",
+            default_value=ESP_PORT,
             description="ESP32 serial device",
         ),
         DeclareLaunchArgument(
             "baud",
-            default_value="115200",
+            default_value=BAUD,
             description="ESP32 serial baud rate",
         ),
 

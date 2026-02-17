@@ -115,6 +115,9 @@ static void handleFeed(uint32_t seq, const Protocol::FeedCmd& cmd) {
 // -------------------- setup() --------------------
 
 void setup() {
+  // Enlarge TX buffer so enc+imu telemetry doesn't overflow the
+  // default 128-byte UART FIFO when multiple messages queue up.
+  Serial.setTxBufferSize(1024);
   Serial.begin(RobotConfig::SERIAL_BUAD_RATE);
   delay(500);
 

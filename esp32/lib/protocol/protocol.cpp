@@ -15,18 +15,24 @@ Protocol::Protocol(Stream& serial)
 }
 
 void Protocol::sendJson(const JsonDocument& doc) {
-  // Serialize to a local buffer and write in one shot.
-  // This avoids interleaving with incoming serial data and
-  // ensures the Pi always sees a complete NDJSON line.
+  // Serialize to a local buffer first, then write as one atomic chunk.
+  // This prevents byte-level interleaving when multiple messages are
+  // sent in quick succession (enc telemetry + IMU + acks).
   char buf[512];
   size_t n = serializeJson(doc, buf, sizeof(buf) - 1);
   if (n >= sizeof(buf) - 1) {
     // Message too long — fall back to stream (rare)
+    _serial.flush();  // drain TX buffer first
     serializeJson(doc, _serial);
     _serial.print('\n');
     return;
   }
   buf[n] = '\n';
+
+  // Flush any pending TX bytes before writing our message.
+  // This ensures the previous message is fully sent before we
+  // push new bytes, preventing UART buffer interleaving.
+  _serial.flush();
   _serial.write(buf, n + 1);
 }
 
@@ -187,8 +193,7 @@ void Protocol::onDrv(JsonDocument& doc) {
   // Let the robot code apply the command.
   if (_cb.onDrive) _cb.onDrive(seq, cmd);
 
-  // Keep protocol simple: ack regardless (or make this conditional later).
-  sendAck(seq, "drv");
+  // No ack for high-frequency drive commands — see onDrv2 comment.
 }
 
 void Protocol::onMode(JsonDocument& doc) {
@@ -231,7 +236,9 @@ void Protocol::onDrv2(JsonDocument& doc) {
 
   if (_cb.onDrive2) _cb.onDrive2(seq, cmd);
 
-  sendAck(seq, "drv2");
+  // No ack for drv2 — it arrives at 50Hz and acking every command
+  // saturates the UART TX buffer, causing byte-level corruption
+  // when interleaved with encoder/IMU telemetry.
 }
 
 void Protocol::sendDriveTelemetry(const DriveTelemetry& tel) {

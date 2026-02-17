@@ -86,7 +86,7 @@ public:
 
 private:
   // --- Parsing/framing ---
-  static constexpr size_t LINE_BUF = 256;   // adjust as needed
+  static constexpr size_t LINE_BUF = 300;   // sized for COBS overhead
   char   _lineBuf[LINE_BUF];
   size_t _lineLen = 0;
 

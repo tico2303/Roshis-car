@@ -26,6 +26,51 @@ def _crc16(data: bytes) -> int:
     return crc
 
 
+def _cobs_decode(data: bytes) -> bytes:
+    """Decode a COBS-encoded frame (without the trailing 0x00 delimiter)."""
+    out = bytearray()
+    i = 0
+    while i < len(data):
+        code = data[i]
+        i += 1
+        if code == 0:
+            return b""  # unexpected null — corrupt
+        for _ in range(code - 1):
+            if i >= len(data):
+                return b""
+            out.append(data[i])
+            i += 1
+        if code < 0xFF and i < len(data):
+            out.append(0)
+    return bytes(out)
+
+
+def _cobs_encode(data: bytes) -> bytes:
+    """COBS-encode data, returns encoded bytes including trailing 0x00."""
+    out = bytearray()
+    idx = 0
+    code_idx = len(out)
+    out.append(0)  # placeholder for first code byte
+    code = 1
+    for b in data:
+        if b != 0:
+            out.append(b)
+            code += 1
+            if code == 0xFF:
+                out[code_idx] = code
+                code_idx = len(out)
+                out.append(0)
+                code = 1
+        else:
+            out[code_idx] = code
+            code_idx = len(out)
+            out.append(0)
+            code = 1
+    out[code_idx] = code
+    out.append(0x00)  # frame delimiter
+    return bytes(out)
+
+
 def sanitize_type(t: str) -> str:
     """
     ROS topic segments should be conservative.
@@ -173,9 +218,10 @@ class NdjsonBridgeNode(Node):
 
         compact = json.dumps(obj, separators=(",", ":"))
         crc = _crc16(compact.encode("utf-8"))
-        line = f"{compact}\t{crc:04x}\n"
+        payload = f"{compact}\t{crc:04x}".encode("utf-8")
+        frame = _cobs_encode(payload)
         try:
-            ser.write(line.encode("utf-8"))
+            ser.write(frame)
         except Exception as e:
             self.get_logger().warn(f"Serial write failed: {e}")
             self._close_serial()
@@ -239,13 +285,18 @@ class NdjsonBridgeNode(Node):
                     self._rx_buf.clear()
                     continue
 
-                # Extract and process all complete lines
-                while b"\n" in self._rx_buf:
-                    idx = self._rx_buf.index(b"\n")
-                    line = bytes(self._rx_buf[:idx]).strip(b" \r")
+                # Extract and process all complete COBS frames (delimited by 0x00)
+                while b"\x00" in self._rx_buf:
+                    idx = self._rx_buf.index(b"\x00")
+                    raw_frame = bytes(self._rx_buf[:idx])
                     del self._rx_buf[: idx + 1]
 
+                    if not raw_frame:
+                        continue
+
+                    line = _cobs_decode(raw_frame)
                     if not line:
+                        self._crc_drop_count += 1
                         continue
 
                     self._process_rx_line(line)

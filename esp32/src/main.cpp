@@ -147,18 +147,18 @@ void setup() {
   proto.setCallbacks(cb);
 
   // ---- I2C bring-up ----
+  // All debug output goes through proto.sendErr so it is COBS-framed.
+  // Raw Serial.println would inject unframed bytes and corrupt the stream.
   if (!i2c.begin()) {
-    Serial.println("[I2C] begin FAILED");
+    proto.sendErr("debug", 0, "[I2C] begin FAILED");
   } else {
-    Serial.println("[I2C] begin OK");
+    proto.sendErr("debug", 0, "[I2C] begin OK");
   }
 
   for (size_t i = 0; i < I2C_SENSOR_COUNT; i++) {
     I2CSensor* s = i2cSensors[i];
-    Serial.print("[I2C] begin ");
-    Serial.print(s->name());
-    Serial.print(" ... ");
-    Serial.println(s->begin(i2c) ? "OK" : "FAIL");
+    bool ok = s->begin(i2c);
+    proto.sendErr("debug", 0, s->name(), ok ? "OK" : "FAIL");
   }
 
   // ---- Boot announce ----

@@ -26,24 +26,66 @@ static uint16_t crc16(const uint8_t* data, size_t len) {
   return crc;
 }
 
+// COBS encode: guarantees no 0x00 in output; appends 0x00 delimiter.
+// Returns number of bytes written to `out`.
+static size_t cobs_encode(const uint8_t* in, size_t in_len, uint8_t* out) {
+  size_t out_idx = 0;
+  size_t code_idx = out_idx++;
+  uint8_t code = 1;
+  for (size_t i = 0; i < in_len; i++) {
+    if (in[i] != 0x00) {
+      out[out_idx++] = in[i];
+      if (++code == 0xFF) {
+        out[code_idx] = code;
+        code_idx = out_idx++;
+        code = 1;
+      }
+    } else {
+      out[code_idx] = code;
+      code_idx = out_idx++;
+      code = 1;
+    }
+  }
+  out[code_idx] = code;
+  out[out_idx++] = 0x00;  // frame delimiter
+  return out_idx;
+}
+
+// COBS decode: returns decoded length, or 0 on error.
+static size_t cobs_decode(const uint8_t* in, size_t in_len, uint8_t* out) {
+  size_t out_idx = 0;
+  size_t i = 0;
+  while (i < in_len) {
+    uint8_t code = in[i++];
+    if (code == 0x00) return 0;
+    for (uint8_t j = 1; j < code; j++) {
+      if (i >= in_len) return 0;
+      out[out_idx++] = in[i++];
+    }
+    if (code < 0xFF && i < in_len) {
+      out[out_idx++] = 0x00;
+    }
+  }
+  return out_idx;
+}
+
 void Protocol::sendJson(const JsonDocument& doc) {
-  // Serialize JSON to buffer, append \tXXXX checksum, then \n.
-  // Format: <json>\t<4-hex-digit-CRC16>\n
-  // The bridge verifies the CRC and silently drops corrupted lines.
+  // Serialize JSON, append \tXXXX CRC, COBS-encode, write with 0x00 delimiter.
   char buf[520];
   size_t n = serializeJson(doc, buf, 510);
-  if (n == 0 || n >= 510) return;  // shouldn't happen
+  if (n == 0 || n >= 510) return;
 
   uint16_t c = crc16((const uint8_t*)buf, n);
-  // Append \tXXXX\n  (4 hex digits)
   buf[n]     = '\t';
   buf[n + 1] = "0123456789abcdef"[(c >> 12) & 0x0f];
   buf[n + 2] = "0123456789abcdef"[(c >>  8) & 0x0f];
   buf[n + 3] = "0123456789abcdef"[(c >>  4) & 0x0f];
   buf[n + 4] = "0123456789abcdef"[ c        & 0x0f];
-  buf[n + 5] = '\n';
+  size_t payload_len = n + 5;  // json + \t + 4 hex digits
 
-  _serial.write(buf, n + 6);
+  uint8_t cobs_buf[530];
+  size_t cobs_len = cobs_encode((const uint8_t*)buf, payload_len, cobs_buf);
+  _serial.write(cobs_buf, cobs_len);
 }
 
 void Protocol::sendHelloAck(uint32_t seq) {
@@ -96,32 +138,31 @@ void Protocol::sendBoot(uint32_t uptimeSeconds) {
 }
 
 void Protocol::poll() {
-  // Read bytes and assemble newline-delimited messages.
+  // Read bytes and assemble COBS-framed messages (delimiter = 0x00).
   while (_serial.available()) {
-    char c = (char)_serial.read();
+    uint8_t c = (uint8_t)_serial.read();
 
-    if (c == '\r') {
-      // Ignore CR so Windows line endings don't break us.
-      continue;
-    }
-
-    if (c == '\n') {
-      // End of message. Null-terminate and handle if non-empty.
-      _lineBuf[_lineLen] = '\0';
+    if (c == 0x00) {
+      // End of COBS frame — decode and handle.
       if (_lineLen > 0) {
-        handleLine(_lineBuf);
+        uint8_t decoded[LINE_BUF];
+        size_t dlen = cobs_decode((const uint8_t*)_lineBuf, _lineLen, decoded);
+        if (dlen > 0) {
+          decoded[dlen] = '\0';
+          handleLine((const char*)decoded);
+        }
+        // else: COBS decode error, silently drop
       }
       _lineLen = 0;
       continue;
     }
 
-    // Regular character: append if there is room.
+    // Accumulate raw COBS bytes.
     if (_lineLen < (LINE_BUF - 1)) {
-      _lineBuf[_lineLen++] = c;
+      _lineBuf[_lineLen++] = (char)c;
     } else {
-      // Line overflow. Reset and report error.
       _lineLen = 0;
-      sendErr("line_too_long");
+      sendErr("frame_too_long");
     }
   }
 }

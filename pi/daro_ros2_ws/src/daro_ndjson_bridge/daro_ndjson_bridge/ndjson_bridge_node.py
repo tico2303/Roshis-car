@@ -242,7 +242,7 @@ class NdjsonBridgeNode(Node):
                 # Extract and process all complete lines
                 while b"\n" in self._rx_buf:
                     idx = self._rx_buf.index(b"\n")
-                    line = bytes(self._rx_buf[:idx]).strip()
+                    line = bytes(self._rx_buf[:idx]).strip(b" \r")
                     del self._rx_buf[: idx + 1]
 
                     if not line:

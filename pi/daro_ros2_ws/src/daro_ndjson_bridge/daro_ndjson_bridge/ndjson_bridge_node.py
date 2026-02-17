@@ -282,29 +282,33 @@ class NdjsonBridgeNode(Node):
         """
         # --- CRC verification ---
         tab_idx = line.rfind(b"\t")
-        if tab_idx >= 0:
-            json_part = line[:tab_idx]
-            crc_hex = line[tab_idx + 1:]
-            try:
-                expected = int(crc_hex, 16)
-            except ValueError:
-                # Tab present but CRC not parseable — corrupted
-                self._crc_drop_count += 1
-                return
-            actual = _crc8(json_part)
-            if actual != expected:
-                self._crc_drop_count += 1
-                return
-            line = json_part
+        if tab_idx < 0:
+            # No tab = no CRC — drop (all ESP32 messages now include CRC)
+            self._crc_drop_count += 1
+            return
+
+        json_part = line[:tab_idx]
+        crc_hex = line[tab_idx + 1:]
+        try:
+            expected = int(crc_hex, 16)
+        except ValueError:
+            self._crc_drop_count += 1
+            return
+        actual = _crc8(json_part)
+        if actual != expected:
+            self._crc_drop_count += 1
+            return
+        line = json_part
 
         try:
             obj = json.loads(line.decode("utf-8", errors="replace"))
             if not isinstance(obj, dict):
                 raise ValueError("rx must be JSON object")
         except Exception as e:
+            # This should be very rare now — CRC passed but JSON invalid
             if bool(self.get_parameter("log_rx_bad_json").value):
                 self.get_logger().warn(
-                    f"RX invalid JSON: {e} | {line[:200]!r}",
+                    f"RX CRC OK but invalid JSON: {e} | {line[:200]!r}",
                     throttle_duration_sec=2.0,
                 )
             return

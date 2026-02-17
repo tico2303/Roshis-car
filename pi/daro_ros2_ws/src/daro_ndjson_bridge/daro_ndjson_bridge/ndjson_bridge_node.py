@@ -35,7 +35,7 @@ class NdjsonBridgeNode(Node):
       Serial NDJSON object -> publish JSON text on:
         /esp32/rx_json/<type>
       and also on:
-        /esp32/rx_json/all   
+        /esp32/rx_json/all
 
     TX:
       Subscribe to /esp32/tx_json (String containing JSON object text) -> write NDJSON line.
@@ -63,6 +63,10 @@ class NdjsonBridgeNode(Node):
         self.declare_parameter("rx_root", "/esp32/rx_json")
         self.declare_parameter("tx_topic", "/esp32/tx_json")
 
+        # Serial read timeout — must be long enough for the longest
+        # NDJSON line to arrive fully at the configured baud rate.
+        self.declare_parameter("serial_timeout_s", 0.5)
+
         self.rx_root = str(self.get_parameter("rx_root").value).rstrip("/")
         self.tx_topic = str(self.get_parameter("tx_topic").value)
 
@@ -86,12 +90,20 @@ class NdjsonBridgeNode(Node):
             f"NDJSON bridge started. RX root={self.rx_root}, TX topic={self.tx_topic}"
         )
 
-    # ---------------- Serial management 
+    # ---------------- Serial management
     def _connect(self) -> None:
         port = str(self.get_parameter("port").value)
         baud = int(self.get_parameter("baud").value)
+        timeout = float(self.get_parameter("serial_timeout_s").value)
         try:
-            ser = serial.Serial(port, baudrate=baud, timeout=0.05, write_timeout=0.05)
+            ser = serial.Serial(
+                port,
+                baudrate=baud,
+                timeout=timeout,
+                write_timeout=0.1,
+            )
+            # Flush any stale partial data sitting in the OS buffer
+            ser.reset_input_buffer()
             with self._ser_lock:
                 self._ser = ser
             self.get_logger().info(f"Connected serial: {port} @ {baud}")
@@ -165,7 +177,9 @@ class NdjsonBridgeNode(Node):
         return pub
 
     def _rx_loop(self) -> None:
-        sleep_s = int(self.get_parameter("reconnect_sleep_ms").value) / 1000.0
+        reconnect_s = int(self.get_parameter("reconnect_sleep_ms").value) / 1000.0
+        consecutive_errors = 0
+        max_errors_before_reconnect = 5
 
         while not self._stop.is_set():
             self._ensure_connected()
@@ -173,25 +187,38 @@ class NdjsonBridgeNode(Node):
                 ser = self._ser
 
             if ser is None:
-                time.sleep(sleep_s)
+                time.sleep(reconnect_s)
                 continue
 
             try:
+                # readline() blocks until \n or timeout.
+                # With a 0.5s timeout, even long NDJSON lines (enc+imu)
+                # have plenty of time to arrive at 115200 baud.
                 raw = ser.readline()
+
                 if not raw:
+                    # Timeout with no data — this is normal when ESP32
+                    # isn't sending. Do NOT close the port.
                     continue
+
                 raw = raw.strip()
                 if not raw:
                     continue
 
+                # Reset error counter on any successful read
+                consecutive_errors = 0
+
                 # Parse JSON object
                 try:
-                    obj = json.loads(raw.decode("utf-8"))
+                    obj = json.loads(raw.decode("utf-8", errors="replace"))
                     if not isinstance(obj, dict):
                         raise ValueError("rx must be JSON object")
                 except Exception as e:
                     if bool(self.get_parameter("log_rx_bad_json").value):
-                        self.get_logger().warn(f"RX invalid JSON: {e} | {raw[:160]!r}")
+                        self.get_logger().warn(
+                            f"RX invalid JSON: {e} | {raw[:200]!r}",
+                            throttle_duration_sec=2.0,
+                        )
                     continue
 
                 # Canonical JSON string output
@@ -215,10 +242,22 @@ class NdjsonBridgeNode(Node):
                     m.data = payload
                     pub.publish(m)
 
-            except Exception as e:
-                self.get_logger().warn(f"Serial RX error: {e}")
+            except serial.SerialException as e:
+                consecutive_errors += 1
+                if consecutive_errors >= max_errors_before_reconnect:
+                    self.get_logger().warn(
+                        f"Serial error ({consecutive_errors} consecutive): {e} — reconnecting"
+                    )
+                    self._close_serial()
+                    time.sleep(reconnect_s)
+                    consecutive_errors = 0
+            except OSError as e:
+                self.get_logger().warn(f"Serial OS error: {e} — reconnecting")
                 self._close_serial()
-                time.sleep(0.1)
+                time.sleep(reconnect_s)
+            except Exception as e:
+                self.get_logger().warn(f"RX unexpected error: {e}")
+                time.sleep(0.05)
 
     def destroy_node(self) -> bool:
         self._stop.set()

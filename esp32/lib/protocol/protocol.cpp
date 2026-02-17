@@ -161,8 +161,10 @@ void Protocol::poll() {
     if (_lineLen < (LINE_BUF - 1)) {
       _lineBuf[_lineLen++] = (char)c;
     } else {
+      // Overflow — silently discard and wait for next 0x00 to resync.
+      // Don't sendErr here: at 50Hz drv2 input the error responses
+      // flood the TX buffer and make corruption worse.
       _lineLen = 0;
-      sendErr("frame_too_long");
     }
   }
 }

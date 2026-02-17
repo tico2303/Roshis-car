@@ -16,24 +16,25 @@ Protocol::Protocol(Stream& serial)
 
 void Protocol::sendJson(const JsonDocument& doc) {
   // Serialize to a local buffer first, then write as one atomic chunk.
-  // This prevents byte-level interleaving when multiple messages are
-  // sent in quick succession (enc telemetry + IMU + acks).
   char buf[512];
   size_t n = serializeJson(doc, buf, sizeof(buf) - 1);
   if (n >= sizeof(buf) - 1) {
     // Message too long — fall back to stream (rare)
-    _serial.flush();  // drain TX buffer first
+    _serial.flush();
     serializeJson(doc, _serial);
     _serial.print('\n');
+    _serial.flush();
     return;
   }
   buf[n] = '\n';
 
-  // Flush any pending TX bytes before writing our message.
-  // This ensures the previous message is fully sent before we
-  // push new bytes, preventing UART buffer interleaving.
+  // Flush before AND after: ensures this message doesn't interleave
+  // with a previous or subsequent message in the UART TX buffer.
+  // Without the post-flush, back-to-back sendJson calls (enc + IMU)
+  // can overflow the 128-byte hardware FIFO and corrupt framing.
   _serial.flush();
   _serial.write(buf, n + 1);
+  _serial.flush();
 }
 
 void Protocol::sendHelloAck(uint32_t seq) {

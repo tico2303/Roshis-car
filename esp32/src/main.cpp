@@ -58,6 +58,11 @@ static uint32_t nextSensorMs = 0;
 
 static uint32_t lastUpdateMs = 0;
 
+// Encoder telemetry publishes at a slower rate than the control loop
+// to stay within 115200 baud bandwidth (~11,520 bytes/sec).
+static constexpr uint32_t ENC_PUBLISH_PERIOD_MS = 50;  // 20Hz
+static uint32_t lastEncPublishMs = 0;
+
 // -------------------- Protocol callback: drv2 --------------------
 
 static void handleDrive2(uint32_t seq, const Protocol::Drive2Cmd& cmd) {
@@ -153,7 +158,7 @@ void setup() {
     Serial.print("[I2C] begin ");
     Serial.print(s->name());
     Serial.print(" ... ");
-    //Serial.println(s->begin(i2c) ? "OK" : "FAIL");
+    Serial.println(s->begin(i2c) ? "OK" : "FAIL");
   }
 
   // ---- Boot announce ----
@@ -177,6 +182,11 @@ void loop() {
     lastUpdateMs = now;
 
     drive.update(now, dt);
+  }
+
+  // ---- Encoder telemetry (50ms / 20Hz) ----
+  if (now - lastEncPublishMs >= ENC_PUBLISH_PERIOD_MS) {
+    lastEncPublishMs = now;
     proto.sendDriveTelemetry(drive.telemetry());
   }
 

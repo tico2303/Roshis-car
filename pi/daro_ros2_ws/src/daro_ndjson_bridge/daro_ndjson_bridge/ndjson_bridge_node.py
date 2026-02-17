@@ -50,7 +50,7 @@ class NdjsonBridgeNode(Node):
 
         # -------- Params --------
         self.declare_parameter("port", "/dev/ttyUSB0")
-        self.declare_parameter("baud", 460800)
+        self.declare_parameter("baud", 115200)
         self.declare_parameter("reconnect_sleep_ms", 200)
 
         self.declare_parameter("log_rx_bad_json", True)

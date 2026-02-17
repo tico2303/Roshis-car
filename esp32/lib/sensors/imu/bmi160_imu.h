@@ -98,7 +98,7 @@ private:
   bool _ok = false;
   bool _hasNew = false;
 
-  uint32_t _periodMs = 20;   // 50Hz default
+  uint32_t _periodMs = 50;   // 20Hz default (fits 115200 baud budget)
   uint32_t _nextPollMs = 0;
 
   Bmi160Reading _last{};

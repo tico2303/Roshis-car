@@ -8,4 +8,4 @@ Individual launch args can still override at runtime, e.g.:
 
 # Serial communication with ESP32
 ESP_PORT = "/dev/ttyUSB0"
-BAUD = "460800"
+BAUD = "115200"

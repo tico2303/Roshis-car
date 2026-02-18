@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Bare-bones serial RX test. No COBS, no CRC — just newline-delimited JSON.
-Pairs with esp32/src/test/io/baseline_tx_test.cpp.
+Pairs with esp32/src/test/io/baseline_tx_test.cpp or enc_real_imu_fake_test.cpp.
 
 Shows:
   - Raw bytes as they arrive (first N chunks)
   - Per-message-type stats (ok / corrupt / missing seq gaps)
   - Byte rate and message rate
-  - Latency (ESP32 timestamp vs wall clock drift)
+  - Corruption pattern analysis
 
 Usage: python3 test_baseline_rx.py [port] [baud]
   Default: /dev/ttyUSB0 115200
@@ -19,15 +19,42 @@ import serial
 import time
 
 
+def analyze_corruption(text: str) -> str:
+    """Describe the corruption pattern."""
+    if not text:
+        return "empty"
+    if text[0] != '{':
+        # Find where valid JSON might start
+        brace = text.find('{')
+        if brace > 0:
+            return f"missing first {brace} bytes (starts with {text[:8]!r})"
+        return f"no opening brace (starts with {text[:12]!r})"
+    if not text.endswith('}'):
+        return f"truncated end (ends with ...{text[-12:]!r})"
+    return f"other (starts with {text[:20]!r})"
+
+
 def main():
     port = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyUSB0"
     baud = int(sys.argv[2]) if len(sys.argv) > 2 else 115200
 
     print(f"Opening {port} @ {baud}")
     print(f"Expecting plain newline-delimited JSON (no COBS, no CRC)")
-    print(f"Flash ESP32 with: pio run -e test_baseline_tx -t upload\n")
+    print()
+
+    # Check if anything else has the port open
+    print(f"TIP: make sure nothing else is using {port}:")
+    print(f"  sudo fuser {port}")
+    print(f"  sudo lsof {port}")
+    print()
 
     ser = serial.Serial(port, baudrate=baud, timeout=1)
+
+    # KEY: disable any DTR/RTS toggling that could reset ESP32 or
+    # cause the CP2102 to do flow-control handshaking
+    ser.dtr = False
+    ser.rts = False
+
     ser.reset_input_buffer()
     time.sleep(0.3)
     ser.reset_input_buffer()
@@ -39,7 +66,8 @@ def main():
     total_lines = 0
     good_json = 0
     bad_json = 0
-    by_type = {}  # type -> {count, last_seq, gaps, last_t_ms}
+    by_type = {}  # type -> {count, last_seq, gaps, gap_detail}
+    corruption_patterns = {"missing_start": 0, "truncated_end": 0, "merged": 0, "other": 0}
 
     start = time.time()
     last_report = start
@@ -125,15 +153,26 @@ def main():
                     good_json += 1
                 except Exception:
                     bad_json += 1
+
+                    # Classify corruption
+                    if text[0:1] != '{':
+                        corruption_patterns["missing_start"] += 1
+                    elif not text.endswith('}'):
+                        corruption_patterns["truncated_end"] += 1
+                    elif text.count('{') > 1:
+                        corruption_patterns["merged"] += 1
+                    else:
+                        corruption_patterns["other"] += 1
+
                     if bad_json <= 20:
+                        pattern = analyze_corruption(text)
                         preview = text[:120]
-                        print(f"  [BAD JSON #{bad_json}] ({len(text)}B): {preview!r}")
-                        print(f"           hex: {line[:40].hex(' ')}")
+                        print(f"  [BAD JSON #{bad_json}] ({len(text)}B) {pattern}")
+                        print(f"    {preview!r}")
                     continue
 
                 msg_type = obj.get("type", "?")
                 seq = obj.get("seq")
-                t_ms = obj.get("t")
 
                 if msg_type not in by_type:
                     by_type[msg_type] = {
@@ -184,6 +223,14 @@ def main():
                     print()
                 print()
 
+                if any(v > 0 for v in corruption_patterns.values()):
+                    print(f"  Corruption breakdown:")
+                    print(f"    missing_start: {corruption_patterns['missing_start']}  (bytes lost at start of msg)")
+                    print(f"    truncated_end: {corruption_patterns['truncated_end']}  (msg cut short)")
+                    print(f"    merged:        {corruption_patterns['merged']}  (two msgs jammed together)")
+                    print(f"    other:         {corruption_patterns['other']}")
+                    print()
+
                 for t, info in sorted(by_type.items()):
                     rate = info["count"] / elapsed
                     print(f"  type={t:8s}  count={info['count']:5d}  ({rate:.1f}/s)  gaps={info['gaps']}")
@@ -205,6 +252,13 @@ def main():
         if good_json + bad_json > 0:
             print(f"  Corrupt rate: {100*bad_json/(good_json+bad_json):.1f}%")
         print()
+        if any(v > 0 for v in corruption_patterns.values()):
+            print(f"  Corruption breakdown:")
+            print(f"    missing_start: {corruption_patterns['missing_start']}")
+            print(f"    truncated_end: {corruption_patterns['truncated_end']}")
+            print(f"    merged:        {corruption_patterns['merged']}")
+            print(f"    other:         {corruption_patterns['other']}")
+            print()
         for t, info in sorted(by_type.items()):
             print(f"  {t}: {info['count']} msgs, {info['gaps']} seq gaps")
             for g in info["gap_detail"]:

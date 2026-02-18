@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import queue
 import re
 import threading
 import time
@@ -142,6 +143,11 @@ class NdjsonBridgeNode(Node):
         self._rx_buf = bytearray()
         self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
 
+        # TX queue — all serial writes go through the RX thread to avoid
+        # concurrent read/write on the CP2102, which causes byte loss.
+        self._tx_queue: queue.Queue[bytes] = queue.Queue(maxsize=200)
+        self._tx_count_10s = 0
+
         # Drop stats — logged periodically so you can monitor link quality
         self._drop_cobs_fail = 0
         self._drop_no_tab = 0
@@ -204,6 +210,8 @@ class NdjsonBridgeNode(Node):
 
     # ---------------- TX: ROS -> Serial ----------------
     def _on_tx_json(self, msg: String) -> None:
+        """Enqueue a TX frame; actual write happens in _rx_loop to avoid
+        concurrent read/write on the USB-serial chip."""
         text = msg.data.strip()
         if not text:
             return
@@ -217,21 +225,15 @@ class NdjsonBridgeNode(Node):
                 self.get_logger().warn(f"TX invalid JSON: {e} | {text[:160]!r}")
             return
 
-        self._ensure_connected()
-        with self._ser_lock:
-            ser = self._ser
-        if ser is None:
-            return
-
         compact = json.dumps(obj, separators=(",", ":"))
         crc = _crc16(compact.encode("utf-8"))
         payload = f"{compact}\t{crc:04x}".encode("utf-8")
         frame = _cobs_encode(payload)
+
         try:
-            ser.write(frame)
-        except Exception as e:
-            self.get_logger().warn(f"Serial write failed: {e}")
-            self._close_serial()
+            self._tx_queue.put_nowait(frame)
+        except queue.Full:
+            pass  # drop oldest commands silently under load
 
     # ---------------- RX: Serial -> ROS ----------------
     def _get_or_create_type_pub(self, safe_type: str) -> Optional[rclpy.publisher.Publisher]:
@@ -274,12 +276,24 @@ class NdjsonBridgeNode(Node):
                 continue
 
             try:
-                # Read whatever bytes are available (up to 512).
-                # This may be a partial line, a full line, or multiple lines.
+                # --- Drain TX queue (write before read so ESP32 gets
+                # commands promptly, and all I/O is on this one thread) ---
+                while not self._tx_queue.empty():
+                    try:
+                        frame = self._tx_queue.get_nowait()
+                        ser.write(frame)
+                        self._tx_count_10s += 1
+                    except queue.Empty:
+                        break
+                    except Exception as e:
+                        self.get_logger().warn(f"Serial write failed: {e}")
+                        self._close_serial()
+                        break
+
+                # --- Read whatever bytes are available (up to 512). ---
                 chunk = ser.read(ser.in_waiting or 1)
 
                 if not chunk:
-                    # Timeout with no data — normal idle, do NOT reconnect
                     continue
 
                 self._rx_buf.extend(chunk)
@@ -419,6 +433,8 @@ class NdjsonBridgeNode(Node):
                 parts.append(f"crc_mismatch={self._drop_crc_mismatch}")
             if self._drop_newlines_seen:
                 parts.append(f"NEWLINES={self._drop_newlines_seen}(!)")
+            if self._tx_count_10s:
+                parts.append(f"tx={self._tx_count_10s}")
 
             level = "info" if total_drops == 0 else "warn"
             msg = f"Serial 10s: {' | '.join(parts)}"
@@ -436,6 +452,7 @@ class NdjsonBridgeNode(Node):
         self._drop_crc_mismatch = 0
         self._drop_newlines_seen = 0
         self._rx_good = 0
+        self._tx_count_10s = 0
 
     def destroy_node(self) -> bool:
         self._stop.set()

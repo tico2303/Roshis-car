@@ -164,6 +164,7 @@ class NdjsonBridgeNode(Node):
                 baudrate=baud,
                 timeout=timeout,
                 write_timeout=0.1,
+                exclusive=True,  # TIOCEXCL — prevents other processes opening the port
             )
             # Flush any stale partial data sitting in the OS buffer
             ser.reset_input_buffer()

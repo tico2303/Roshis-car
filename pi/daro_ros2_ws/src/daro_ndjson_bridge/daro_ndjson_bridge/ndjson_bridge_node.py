@@ -142,15 +142,21 @@ class NdjsonBridgeNode(Node):
         self._rx_buf = bytearray()
         self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
 
-        # CRC drop stats — logged periodically so you can monitor link quality
-        self._crc_drop_count = 0
+        # Drop stats — logged periodically so you can monitor link quality
+        self._drop_cobs_fail = 0
+        self._drop_no_tab = 0
+        self._drop_bad_crc_hex = 0
+        self._drop_crc_mismatch = 0
+        self._drop_newlines_seen = 0
+        self._rx_good = 0
         self._crc_log_timer = self.create_timer(10.0, self._log_crc_stats)
 
         self._connect()
         self._rx_thread.start()
 
         self.get_logger().info(
-            f"NDJSON bridge started. RX root={self.rx_root}, TX topic={self.tx_topic}"
+            f"NDJSON bridge started (COBS framing). "
+            f"RX root={self.rx_root}, TX topic={self.tx_topic}"
         )
 
     # ---------------- Serial management
@@ -286,6 +292,11 @@ class NdjsonBridgeNode(Node):
                     self._rx_buf.clear()
                     continue
 
+                # Track newlines — if we see them, ESP32 is sending old firmware
+                nl_count = chunk.count(b"\n")
+                if nl_count:
+                    self._drop_newlines_seen += nl_count
+
                 # Extract and process all complete COBS frames (delimited by 0x00)
                 while b"\x00" in self._rx_buf:
                     idx = self._rx_buf.index(b"\x00")
@@ -297,7 +308,7 @@ class NdjsonBridgeNode(Node):
 
                     line = _cobs_decode(raw_frame)
                     if not line:
-                        self._crc_drop_count += 1
+                        self._drop_cobs_fail += 1
                         continue
 
                     self._process_rx_line(line)
@@ -335,8 +346,7 @@ class NdjsonBridgeNode(Node):
         # --- CRC verification ---
         tab_idx = line.rfind(b"\t")
         if tab_idx < 0:
-            # No tab = no CRC — drop (all ESP32 messages now include CRC)
-            self._crc_drop_count += 1
+            self._drop_no_tab += 1
             return
 
         json_part = line[:tab_idx]
@@ -344,11 +354,11 @@ class NdjsonBridgeNode(Node):
         try:
             expected = int(crc_hex, 16)
         except ValueError:
-            self._crc_drop_count += 1
+            self._drop_bad_crc_hex += 1
             return
         actual = _crc16(json_part)
         if actual != expected:
-            self._crc_drop_count += 1
+            self._drop_crc_mismatch += 1
             return
         line = json_part
 
@@ -364,6 +374,8 @@ class NdjsonBridgeNode(Node):
                     throttle_duration_sec=2.0,
                 )
             return
+
+        self._rx_good += 1
 
         # Canonical JSON string output
         payload = json.dumps(obj, separators=(",", ":"))
@@ -387,11 +399,43 @@ class NdjsonBridgeNode(Node):
             pub.publish(m)
 
     def _log_crc_stats(self) -> None:
-        if self._crc_drop_count > 0:
-            self.get_logger().info(
-                f"CRC: dropped {self._crc_drop_count} corrupted lines in last 10s"
-            )
-            self._crc_drop_count = 0
+        total_drops = (
+            self._drop_cobs_fail
+            + self._drop_no_tab
+            + self._drop_bad_crc_hex
+            + self._drop_crc_mismatch
+        )
+        if total_drops > 0 or self._rx_good > 0:
+            parts = []
+            if self._rx_good:
+                parts.append(f"ok={self._rx_good}")
+            if self._drop_cobs_fail:
+                parts.append(f"cobs_fail={self._drop_cobs_fail}")
+            if self._drop_no_tab:
+                parts.append(f"no_tab={self._drop_no_tab}")
+            if self._drop_bad_crc_hex:
+                parts.append(f"bad_crc_hex={self._drop_bad_crc_hex}")
+            if self._drop_crc_mismatch:
+                parts.append(f"crc_mismatch={self._drop_crc_mismatch}")
+            if self._drop_newlines_seen:
+                parts.append(f"NEWLINES={self._drop_newlines_seen}(!)")
+
+            level = "info" if total_drops == 0 else "warn"
+            msg = f"Serial 10s: {' | '.join(parts)}"
+
+            if self._drop_newlines_seen > 0 and self._rx_good == 0:
+                msg += " >>> ESP32 sending newline-framed data — reflash firmware!"
+            elif self._drop_no_tab > total_drops * 0.5:
+                msg += " >>> Most frames have no tab — possible framing mismatch"
+
+            getattr(self.get_logger(), level)(msg)
+
+        self._drop_cobs_fail = 0
+        self._drop_no_tab = 0
+        self._drop_bad_crc_hex = 0
+        self._drop_crc_mismatch = 0
+        self._drop_newlines_seen = 0
+        self._rx_good = 0
 
     def destroy_node(self) -> bool:
         self._stop.set()

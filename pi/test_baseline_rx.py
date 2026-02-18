@@ -107,6 +107,17 @@ def main():
                     continue
 
                 text = line.decode("utf-8", errors="replace")
+                elapsed = time.time() - start
+
+                # Print EVERY line for first 10 seconds
+                if elapsed < 10.0:
+                    ok_str = "   "
+                    try:
+                        json.loads(text)
+                        ok_str = "OK "
+                    except Exception:
+                        ok_str = "BAD"
+                    print(f"  [{ok_str}] {len(text):3d}B | {text[:140]}")
 
                 # Try JSON parse
                 try:
@@ -114,11 +125,9 @@ def main():
                     good_json += 1
                 except Exception:
                     bad_json += 1
-                    if bad_json <= 10:
-                        # Show the corrupt line
+                    if bad_json <= 20:
                         preview = text[:120]
                         print(f"  [BAD JSON #{bad_json}] ({len(text)}B): {preview!r}")
-                        # Show hex of first 40 bytes
                         print(f"           hex: {line[:40].hex(' ')}")
                     continue
 

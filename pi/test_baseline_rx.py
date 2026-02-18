@@ -43,9 +43,23 @@ def main():
     print()
 
     # Check if anything else has the port open
-    print(f"TIP: make sure nothing else is using {port}:")
-    print(f"  sudo fuser {port}")
-    print(f"  sudo lsof {port}")
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["fuser", port], capture_output=True, text=True, timeout=3
+        )
+        pids = result.stdout.strip()
+        if pids:
+            print(f"  *** WARNING: {port} is already in use by PID(s): {pids} ***")
+            print(f"  Run: sudo lsof {port}")
+            print(f"  Kill with: sudo kill {pids.split()[-1]}")
+            resp = input("  Continue anyway? [y/N] ")
+            if resp.lower() != "y":
+                sys.exit(1)
+        else:
+            print(f"  Port {port} is free ✓")
+    except Exception:
+        pass
     print()
 
     ser = serial.Serial(port, baudrate=baud, timeout=1)

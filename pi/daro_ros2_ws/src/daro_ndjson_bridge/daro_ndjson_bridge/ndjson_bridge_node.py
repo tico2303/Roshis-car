@@ -189,7 +189,7 @@ class NdjsonBridgeNode(Node):
         except Exception as e:
             with self._ser_lock:
                 self._ser = None
-            self.get_logger().warn(f"Serial connect failed ({port}): {e}")
+            self.get_logger().warning(f"Serial connect failed ({port}): {e}")
 
     def _ensure_connected(self) -> None:
         with self._ser_lock:
@@ -222,7 +222,7 @@ class NdjsonBridgeNode(Node):
                 raise ValueError("tx_json must be a JSON object")
         except Exception as e:
             if bool(self.get_parameter("log_tx_bad_json").value):
-                self.get_logger().warn(f"TX invalid JSON: {e} | {text[:160]!r}")
+                self.get_logger().warning(f"TX invalid JSON: {e} | {text[:160]!r}")
             return
 
         compact = json.dumps(obj, separators=(",", ":"))
@@ -242,7 +242,7 @@ class NdjsonBridgeNode(Node):
 
         max_types = int(self.get_parameter("max_dynamic_types").value)
         if len(self._pub_by_type) >= max_types:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f"Type publisher limit reached ({max_types}). Dropping new type: {safe_type}"
             )
             return None
@@ -286,7 +286,7 @@ class NdjsonBridgeNode(Node):
                     except queue.Empty:
                         break
                     except Exception as e:
-                        self.get_logger().warn(f"Serial write failed: {e}")
+                        self.get_logger().warning(f"Serial write failed: {e}")
                         self._close_serial()
                         break
 
@@ -300,7 +300,7 @@ class NdjsonBridgeNode(Node):
 
                 # Safety: if buffer grows huge, something is wrong — discard
                 if len(self._rx_buf) > max_buf:
-                    self.get_logger().warn(
+                    self.get_logger().warning(
                         f"RX buffer overflow ({len(self._rx_buf)} bytes), discarding"
                     )
                     self._rx_buf.clear()
@@ -336,17 +336,17 @@ class NdjsonBridgeNode(Node):
                     continue
 
                 # Real serial error — reconnect
-                self.get_logger().warn(f"Serial error: {e} — reconnecting")
+                self.get_logger().warning(f"Serial error: {e} — reconnecting")
                 self._close_serial()
                 self._rx_buf.clear()
                 time.sleep(reconnect_s)
             except OSError as e:
-                self.get_logger().warn(f"Serial OS error: {e} — reconnecting")
+                self.get_logger().warning(f"Serial OS error: {e} — reconnecting")
                 self._close_serial()
                 self._rx_buf.clear()
                 time.sleep(reconnect_s)
             except Exception as e:
-                self.get_logger().warn(f"RX unexpected error: {e}")
+                self.get_logger().warning(f"RX unexpected error: {e}")
                 time.sleep(0.05)
 
     def _process_rx_line(self, line: bytes) -> None:
@@ -383,7 +383,7 @@ class NdjsonBridgeNode(Node):
         except Exception as e:
             # This should be very rare now — CRC passed but JSON invalid
             if bool(self.get_parameter("log_rx_bad_json").value):
-                self.get_logger().warn(
+                self.get_logger().warning(
                     f"RX CRC OK but invalid JSON: {e} | {line[:200]!r}",
                     throttle_duration_sec=2.0,
                 )
@@ -436,7 +436,6 @@ class NdjsonBridgeNode(Node):
             if self._tx_count_10s:
                 parts.append(f"tx={self._tx_count_10s}")
 
-            level = "info" if total_drops == 0 else "warn"
             msg = f"Serial 10s: {' | '.join(parts)}"
 
             if self._drop_newlines_seen > 0 and self._rx_good == 0:
@@ -444,7 +443,10 @@ class NdjsonBridgeNode(Node):
             elif self._drop_no_tab > total_drops * 0.5:
                 msg += " >>> Most frames have no tab — possible framing mismatch"
 
-            getattr(self.get_logger(), level)(msg)
+            if total_drops == 0:
+                self.get_logger().info(msg)
+            else:
+                self.get_logger().warning(msg)
 
         self._drop_cobs_fail = 0
         self._drop_no_tab = 0

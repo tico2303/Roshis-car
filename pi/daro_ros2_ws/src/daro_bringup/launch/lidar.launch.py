@@ -58,4 +58,5 @@ def generate_launch_description():
 
         robot_state_publisher,
         lidar_node,
+
     ])

@@ -16,10 +16,8 @@ def generate_launch_description():
 
     lidar_launch = os.path.join(bringup, "launch", "lidar.launch.py")
     default_slam_params = os.path.join(bringup, "config", "slam.yaml")
-    default_rviz_config = os.path.join(bringup, "rviz", "slam.rviz")
 
     slam_params = LaunchConfiguration("slam_params")
-    rviz_config = LaunchConfiguration("rviz_config")
 
     # LiDAR + base_link->laser TF comes from lidar.launch.py (robot_state_publisher)
     include_lidar = IncludeLaunchDescription(
@@ -34,8 +32,8 @@ def generate_launch_description():
         namespace="",
         output="screen",
         arguments=["--x", "0", "--y", "0", "--z", "0",
-                   "--roll", "0", "--pitch", "0", "--yaw", "0",
-                   "--frame-id", "odom", "--child-frame-id", "base_link"],
+            "--roll", "0", "--pitch", "0", "--yaw", "0",
+            "--frame-id", "odom", "--child-frame-id", "base_link"],
     )
 
     # slam_toolbox is LifecycleNode -> it will NOT publish /map until Activated
@@ -43,7 +41,7 @@ def generate_launch_description():
         package="slam_toolbox",
         executable="async_slam_toolbox_node",
         name="slam_toolbox",
-        namespace="", 
+        namespace="",
         output="screen",
         emulate_tty=True,
         parameters=[ParameterFile(slam_params, allow_substs=True)],
@@ -67,31 +65,17 @@ def generate_launch_description():
         }],
     )
 
-    rviz_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
-        namespace="",
-        output="screen",
-        arguments=["-d", rviz_config],
-    )
-
     return LaunchDescription([
         DeclareLaunchArgument(
             "slam_params",
             default_value=default_slam_params,
             description="Path to slam_toolbox YAML params file",
         ),
-        DeclareLaunchArgument(
-            "rviz_config",
-            default_value=default_rviz_config,
-            description="Path to RViz config file",
-        ),
 
         include_lidar,
         static_odom_tf,
+
         slam_node,
         lifecycle_mgr,
 
-        rviz_node,
     ])

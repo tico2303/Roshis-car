@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import queue
 import re
 import threading
 import time
@@ -142,15 +143,26 @@ class NdjsonBridgeNode(Node):
         self._rx_buf = bytearray()
         self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
 
-        # CRC drop stats — logged periodically so you can monitor link quality
-        self._crc_drop_count = 0
+        # TX queue — all serial writes go through the RX thread to avoid
+        # concurrent read/write on the CP2102, which causes byte loss.
+        self._tx_queue: queue.Queue[bytes] = queue.Queue(maxsize=200)
+        self._tx_count_10s = 0
+
+        # Drop stats — logged periodically so you can monitor link quality
+        self._drop_cobs_fail = 0
+        self._drop_no_tab = 0
+        self._drop_bad_crc_hex = 0
+        self._drop_crc_mismatch = 0
+        self._drop_newlines_seen = 0
+        self._rx_good = 0
         self._crc_log_timer = self.create_timer(10.0, self._log_crc_stats)
 
         self._connect()
         self._rx_thread.start()
 
         self.get_logger().info(
-            f"NDJSON bridge started. RX root={self.rx_root}, TX topic={self.tx_topic}"
+            f"NDJSON bridge started (COBS framing). "
+            f"RX root={self.rx_root}, TX topic={self.tx_topic}"
         )
 
     # ---------------- Serial management
@@ -164,6 +176,7 @@ class NdjsonBridgeNode(Node):
                 baudrate=baud,
                 timeout=timeout,
                 write_timeout=0.1,
+                exclusive=True,  # TIOCEXCL — prevents other processes opening the port
             )
             # Flush any stale partial data sitting in the OS buffer
             ser.reset_input_buffer()
@@ -176,7 +189,7 @@ class NdjsonBridgeNode(Node):
         except Exception as e:
             with self._ser_lock:
                 self._ser = None
-            self.get_logger().warn(f"Serial connect failed ({port}): {e}")
+            self.get_logger().warning(f"Serial connect failed ({port}): {e}")
 
     def _ensure_connected(self) -> None:
         with self._ser_lock:
@@ -197,6 +210,8 @@ class NdjsonBridgeNode(Node):
 
     # ---------------- TX: ROS -> Serial ----------------
     def _on_tx_json(self, msg: String) -> None:
+        """Enqueue a TX frame; actual write happens in _rx_loop to avoid
+        concurrent read/write on the USB-serial chip."""
         text = msg.data.strip()
         if not text:
             return
@@ -207,24 +222,18 @@ class NdjsonBridgeNode(Node):
                 raise ValueError("tx_json must be a JSON object")
         except Exception as e:
             if bool(self.get_parameter("log_tx_bad_json").value):
-                self.get_logger().warn(f"TX invalid JSON: {e} | {text[:160]!r}")
-            return
-
-        self._ensure_connected()
-        with self._ser_lock:
-            ser = self._ser
-        if ser is None:
+                self.get_logger().warning(f"TX invalid JSON: {e} | {text[:160]!r}")
             return
 
         compact = json.dumps(obj, separators=(",", ":"))
         crc = _crc16(compact.encode("utf-8"))
         payload = f"{compact}\t{crc:04x}".encode("utf-8")
         frame = _cobs_encode(payload)
+
         try:
-            ser.write(frame)
-        except Exception as e:
-            self.get_logger().warn(f"Serial write failed: {e}")
-            self._close_serial()
+            self._tx_queue.put_nowait(frame)
+        except queue.Full:
+            pass  # drop oldest commands silently under load
 
     # ---------------- RX: Serial -> ROS ----------------
     def _get_or_create_type_pub(self, safe_type: str) -> Optional[rclpy.publisher.Publisher]:
@@ -233,7 +242,7 @@ class NdjsonBridgeNode(Node):
 
         max_types = int(self.get_parameter("max_dynamic_types").value)
         if len(self._pub_by_type) >= max_types:
-            self.get_logger().warn(
+            self.get_logger().warning(
                 f"Type publisher limit reached ({max_types}). Dropping new type: {safe_type}"
             )
             return None
@@ -267,23 +276,40 @@ class NdjsonBridgeNode(Node):
                 continue
 
             try:
-                # Read whatever bytes are available (up to 512).
-                # This may be a partial line, a full line, or multiple lines.
+                # --- Drain TX queue (write before read so ESP32 gets
+                # commands promptly, and all I/O is on this one thread) ---
+                while not self._tx_queue.empty():
+                    try:
+                        frame = self._tx_queue.get_nowait()
+                        ser.write(frame)
+                        self._tx_count_10s += 1
+                    except queue.Empty:
+                        break
+                    except Exception as e:
+                        self.get_logger().warning(f"Serial write failed: {e}")
+                        self._close_serial()
+                        break
+
+                # --- Read whatever bytes are available (up to 512). ---
                 chunk = ser.read(ser.in_waiting or 1)
 
                 if not chunk:
-                    # Timeout with no data — normal idle, do NOT reconnect
                     continue
 
                 self._rx_buf.extend(chunk)
 
                 # Safety: if buffer grows huge, something is wrong — discard
                 if len(self._rx_buf) > max_buf:
-                    self.get_logger().warn(
+                    self.get_logger().warning(
                         f"RX buffer overflow ({len(self._rx_buf)} bytes), discarding"
                     )
                     self._rx_buf.clear()
                     continue
+
+                # Track newlines — if we see them, ESP32 is sending old firmware
+                nl_count = chunk.count(b"\n")
+                if nl_count:
+                    self._drop_newlines_seen += nl_count
 
                 # Extract and process all complete COBS frames (delimited by 0x00)
                 while b"\x00" in self._rx_buf:
@@ -296,7 +322,7 @@ class NdjsonBridgeNode(Node):
 
                     line = _cobs_decode(raw_frame)
                     if not line:
-                        self._crc_drop_count += 1
+                        self._drop_cobs_fail += 1
                         continue
 
                     self._process_rx_line(line)
@@ -310,17 +336,17 @@ class NdjsonBridgeNode(Node):
                     continue
 
                 # Real serial error — reconnect
-                self.get_logger().warn(f"Serial error: {e} — reconnecting")
+                self.get_logger().warning(f"Serial error: {e} — reconnecting")
                 self._close_serial()
                 self._rx_buf.clear()
                 time.sleep(reconnect_s)
             except OSError as e:
-                self.get_logger().warn(f"Serial OS error: {e} — reconnecting")
+                self.get_logger().warning(f"Serial OS error: {e} — reconnecting")
                 self._close_serial()
                 self._rx_buf.clear()
                 time.sleep(reconnect_s)
             except Exception as e:
-                self.get_logger().warn(f"RX unexpected error: {e}")
+                self.get_logger().warning(f"RX unexpected error: {e}")
                 time.sleep(0.05)
 
     def _process_rx_line(self, line: bytes) -> None:
@@ -334,8 +360,7 @@ class NdjsonBridgeNode(Node):
         # --- CRC verification ---
         tab_idx = line.rfind(b"\t")
         if tab_idx < 0:
-            # No tab = no CRC — drop (all ESP32 messages now include CRC)
-            self._crc_drop_count += 1
+            self._drop_no_tab += 1
             return
 
         json_part = line[:tab_idx]
@@ -343,11 +368,11 @@ class NdjsonBridgeNode(Node):
         try:
             expected = int(crc_hex, 16)
         except ValueError:
-            self._crc_drop_count += 1
+            self._drop_bad_crc_hex += 1
             return
         actual = _crc16(json_part)
         if actual != expected:
-            self._crc_drop_count += 1
+            self._drop_crc_mismatch += 1
             return
         line = json_part
 
@@ -358,11 +383,13 @@ class NdjsonBridgeNode(Node):
         except Exception as e:
             # This should be very rare now — CRC passed but JSON invalid
             if bool(self.get_parameter("log_rx_bad_json").value):
-                self.get_logger().warn(
+                self.get_logger().warning(
                     f"RX CRC OK but invalid JSON: {e} | {line[:200]!r}",
                     throttle_duration_sec=2.0,
                 )
             return
+
+        self._rx_good += 1
 
         # Canonical JSON string output
         payload = json.dumps(obj, separators=(",", ":"))
@@ -386,11 +413,48 @@ class NdjsonBridgeNode(Node):
             pub.publish(m)
 
     def _log_crc_stats(self) -> None:
-        if self._crc_drop_count > 0:
-            self.get_logger().info(
-                f"CRC: dropped {self._crc_drop_count} corrupted lines in last 10s"
-            )
-            self._crc_drop_count = 0
+        total_drops = (
+            self._drop_cobs_fail
+            + self._drop_no_tab
+            + self._drop_bad_crc_hex
+            + self._drop_crc_mismatch
+        )
+        if total_drops > 0 or self._rx_good > 0:
+            parts = []
+            if self._rx_good:
+                parts.append(f"ok={self._rx_good}")
+            if self._drop_cobs_fail:
+                parts.append(f"cobs_fail={self._drop_cobs_fail}")
+            if self._drop_no_tab:
+                parts.append(f"no_tab={self._drop_no_tab}")
+            if self._drop_bad_crc_hex:
+                parts.append(f"bad_crc_hex={self._drop_bad_crc_hex}")
+            if self._drop_crc_mismatch:
+                parts.append(f"crc_mismatch={self._drop_crc_mismatch}")
+            if self._drop_newlines_seen:
+                parts.append(f"NEWLINES={self._drop_newlines_seen}(!)")
+            if self._tx_count_10s:
+                parts.append(f"tx={self._tx_count_10s}")
+
+            msg = f"Serial 10s: {' | '.join(parts)}"
+
+            if self._drop_newlines_seen > 0 and self._rx_good == 0:
+                msg += " >>> ESP32 sending newline-framed data — reflash firmware!"
+            elif self._drop_no_tab > total_drops * 0.5:
+                msg += " >>> Most frames have no tab — possible framing mismatch"
+
+            if total_drops == 0:
+                self.get_logger().info(msg)
+            else:
+                self.get_logger().warning(msg)
+
+        self._drop_cobs_fail = 0
+        self._drop_no_tab = 0
+        self._drop_bad_crc_hex = 0
+        self._drop_crc_mismatch = 0
+        self._drop_newlines_seen = 0
+        self._rx_good = 0
+        self._tx_count_10s = 0
 
     def destroy_node(self) -> bool:
         self._stop.set()

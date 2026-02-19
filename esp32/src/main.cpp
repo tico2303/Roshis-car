@@ -184,11 +184,11 @@ void loop() {
     drive.update(now, dt);
   }
 
-  // ---- Encoder telemetry (disabled for serial debug) ----
-  // if (now - lastEncPublishMs >= ENC_PUBLISH_PERIOD_MS) {
-  //   lastEncPublishMs = now;
-  //   proto.sendDriveTelemetry(drive.telemetry());
-  // }
+  // ---- Encoder telemetry at 10Hz ----
+  if (now - lastEncPublishMs >= ENC_PUBLISH_PERIOD_MS) {
+    lastEncPublishMs = now;
+    proto.sendDriveTelemetry(drive.telemetry());
+  }
 
   updateBumper();
   //feeder.update();

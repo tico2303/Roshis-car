@@ -1,0 +1,27 @@
+slam_toolbox:
+  ros__parameters:
+    # Required
+    mode: mapping
+    scan_topic: /scan
+
+    # Frames (match URDF)
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+
+    # No odometry yet... waiting for motor encoders 
+    use_odometry: false
+    use_scan_matching: true
+
+    # default configs
+    resolution: 0.05
+    max_laser_range: 12.0
+    transform_timeout: 1.0      #increased time out to give TF time
+    throttle_scans: 3           # proces every 3rd scan ( reduces from 10Hz to 5Hz)
+    minimum_time_interval: 0.25  # don't process more than 5Hz at a time
+    scan_queue_size: 10          #increase buffer
+    map_update_interval: 0.5
+    tf_buffer_duration: 30.0
+
+    use_sim_time: false
+    publish_tf: true

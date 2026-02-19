@@ -9,19 +9,36 @@ slam_toolbox:
     odom_frame: odom
     base_frame: base_link
 
-    # No odometry yet... waiting for motor encoders 
+    # When false, SLAM Toolbox reads odom->base_link from TF (published by
+    # EKF when use_localization:=true, or static identity when standalone).
     use_odometry: false
     use_scan_matching: true
 
-    # default configs
+    # Map resolution (m/cell)
     resolution: 0.05
+
+    # Clip range to a safe value for the S1 LiDAR (max ~12m in practice)
     max_laser_range: 12.0
-    transform_timeout: 1.0      #increased time out to give TF time
-    throttle_scans: 3           # proces every 3rd scan ( reduces from 10Hz to 5Hz)
-    minimum_time_interval: 0.25  # don't process more than 5Hz at a time
-    scan_queue_size: 10          #increase buffer
+
+    # Transform lookup timeout.  0.2 s is plenty once TF is established;
+    # previously 1.0 s was masking the real problem (TF never arriving).
+    transform_timeout: 0.2
+
+    # Process every scan (throttle_scans: 1) at full 10 Hz — the Pi 4
+    # handles this fine and gives SLAM better data to work with.
+    throttle_scans: 1
+    minimum_time_interval: 0.0
+
+    # Queue size: keep it small so stale scans don't pile up.
+    scan_queue_size: 5
+
     map_update_interval: 0.5
+
+    # Large TF buffer so old transforms aren't evicted under load.
     tf_buffer_duration: 30.0
 
     use_sim_time: false
+
+    # SLAM Toolbox publishes map->odom.  odom->base_link comes from EKF
+    # (use_localization:=true) or the static publisher (standalone).
     publish_tf: true

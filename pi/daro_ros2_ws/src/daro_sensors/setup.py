@@ -27,6 +27,7 @@ setup(
             'tof_to_range = daro_sensors.tof_to_range_node:main',
             'imu_json = daro_sensors.imu_json_node:main',
             'enc_json = daro_sensors.enc_json_node:main',
+            "wheel_odom = daro_sensors.wheel_odom_node:main"
         ],
     },
 )

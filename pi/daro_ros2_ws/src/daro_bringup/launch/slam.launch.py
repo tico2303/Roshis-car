@@ -1,42 +1,59 @@
+#!/usr/bin/env python3
 import os
 
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    TimerAction,
+    ExecuteProcess,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
-from launch_ros.actions import LifecycleNode, Node
+from launch_ros.actions import LifecycleNode
 from launch_ros.parameter_descriptions import ParameterFile
 
 
 def generate_launch_description():
+
+    # -------------------------------------------------
+    # Package paths
+    # -------------------------------------------------
     bringup = get_package_share_directory("daro_bringup")
 
     lidar_launch = os.path.join(bringup, "launch", "lidar.launch.py")
+    localization_launch = os.path.join(bringup, "launch", "localization.launch.py")
     default_slam_params = os.path.join(bringup, "config", "slam.yaml")
 
+    # -------------------------------------------------
+    # Launch arguments
+    # -------------------------------------------------
     slam_params = LaunchConfiguration("slam_params")
+    log_level = LaunchConfiguration("log_level")
 
-    # LiDAR + base_link->laser TF comes from lidar.launch.py (robot_state_publisher)
+    # -------------------------------------------------
+    # Include LiDAR
+    # -------------------------------------------------
     include_lidar = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(lidar_launch),
+        launch_arguments={"log_level": log_level}.items(),
     )
 
-    # Temp: fake odom->base_link so SLAM has an odom chain even without encoders
-    static_odom_tf = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="static_odom_to_base_link",
-        namespace="",
-        output="screen",
-        arguments=["--x", "0", "--y", "0", "--z", "0",
-            "--roll", "0", "--pitch", "0", "--yaw", "0",
-            "--frame-id", "odom", "--child-frame-id", "base_link"],
+    # -------------------------------------------------
+    # Include EKF (robot_localization)
+    # This will publish odom -> base_link
+    # -------------------------------------------------
+    include_localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(localization_launch),
+        launch_arguments={"log_level": log_level}.items(),
     )
 
-    # slam_toolbox is LifecycleNode -> it will NOT publish /map until Activated
+    # -------------------------------------------------
+    # SLAM Toolbox Lifecycle Node
+    # -------------------------------------------------
     slam_node = LifecycleNode(
         package="slam_toolbox",
         executable="async_slam_toolbox_node",
@@ -45,37 +62,47 @@ def generate_launch_description():
         output="screen",
         emulate_tty=True,
         parameters=[ParameterFile(slam_params, allow_substs=True)],
+        arguments=["--ros-args", "--log-level", log_level],
     )
 
-    # lifecycle manager configures + activates slam_toolbox
-    lifecycle_mgr = Node(
-        package="nav2_lifecycle_manager",
-        executable="lifecycle_manager",
-        name="lifecycle_manager_slam",
-        namespace="",
+    # -------------------------------------------------
+    # Lifecycle transitions
+    # -------------------------------------------------
+    configure_slam = ExecuteProcess(
+        cmd=["ros2", "lifecycle", "set", "/slam_toolbox", "configure"],
         output="screen",
-        emulate_tty=True,
-        parameters=[{
-            "autostart": True,
-            # IMPORTANT: nav2 lifecycle manager expects node names (usually without leading '/')
-            "node_names": ["slam_toolbox"],
-            # Give it time 
-            "bond_timeout": 20.0,
-            "attempt_respawn_reconnection": True,
-        }],
     )
 
+    activate_slam = ExecuteProcess(
+        cmd=["ros2", "lifecycle", "set", "/slam_toolbox", "activate"],
+        output="screen",
+    )
+
+    # -------------------------------------------------
+    # Launch Description
+    # -------------------------------------------------
     return LaunchDescription([
+
         DeclareLaunchArgument(
             "slam_params",
             default_value=default_slam_params,
             description="Path to slam_toolbox YAML params file",
         ),
 
+        DeclareLaunchArgument(
+            "log_level",
+            default_value="info",
+            description="ROS log level",
+        ),
+
+        # Start sensor + localization first
         include_lidar,
-        static_odom_tf,
+        include_localization,
 
+        # Then SLAM
         slam_node,
-        lifecycle_mgr,
 
+        # Delay lifecycle transitions so EKF + TF are alive first
+        TimerAction(period=3.0, actions=[configure_slam]),
+        TimerAction(period=5.0, actions=[activate_slam]),
     ])

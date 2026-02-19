@@ -105,7 +105,22 @@ def generate_launch_description():
         parameters=[params_file],
         arguments=["--ros-args", "--log-level", log_level],
     )
-
+    wheel_odom_node = Node(
+        package="daro_sensors",
+        executable="wheel_odom",  # console_scripts name
+        name="wheel_odom_node",
+        output="screen",
+        parameters=[{
+            "wheel_radius_m": 0.03,
+            "wheel_separation_m": 0.16,
+            "publish_tf": False,          # EKF will publish TF
+            "joint_states_topic": "/wheel/joint_states",
+            "odom_topic": "/wheel/odom",
+            "odom_frame": "odom",
+            "base_frame": "base_link",
+        }],
+        arguments=["--ros-args", "--log-level", log_level],
+    )
     return LaunchDescription([
         DeclareLaunchArgument(
             "log_level",
@@ -137,4 +152,5 @@ def generate_launch_description():
         tof_to_range_node,
         imu_json_node,
         enc_json_node,
+        wheel_odom_node
     ])

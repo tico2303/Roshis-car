@@ -1,0 +1,41 @@
+ekf_filter_node:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    publish_tf: true
+
+    # ------------- Wheel odom
+    odom0: /wheel/odom
+    odom0_config: [
+      true,  true,  false,   # x, y, z
+      false, false, true,    # roll, pitch, yaw
+      true,  false, false,   # vx, vy, vz
+      false, false, true,    # vroll, vpitch, vyaw
+      false, false, false
+    ]
+    odom0_queue_size: 10
+    odom0_nodelay: true
+    odom0_differential: false
+    odom0_relative: false
+
+    # -------------- IMU (no orientation, but we DO have angular_velocity)
+    imu0: /imu/data_raw
+    imu0_config: [
+      false, false, false,
+      false, false, false,   # don't use orientation yaw since it's unknown
+      false, false, false,
+      false, false, true,    # use yaw rate (angular_velocity.z)
+      false, false, false
+    ]
+    imu0_queue_size: 50
+    imu0_nodelay: true
+    imu0_differential: false
+    imu0_relative: false
+    imu0_remove_gravitational_acceleration: true

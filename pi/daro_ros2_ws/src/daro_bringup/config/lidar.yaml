@@ -2,7 +2,7 @@ sllidar:
   ros__parameters:
     # Connection
     channel_type: "serial"         # serial | tcp 
-    serial_port: "/dev/ttyUSB0"
+    serial_port: "/dev/ttyUSB1"
     serial_baudrate: 460800        # C1M1  uses 460800
 
     # Frames

@@ -81,7 +81,11 @@ def generate_launch_description():
         executable="parameter_bridge",
         name="gz_bridge",
         output="screen",
-        parameters=[{"config_file": bridge_yaml}],
+        parameters=[{
+            "config_file": bridge_yaml,
+            "use_sim_time": True,
+            "lazy": False,
+        }],
     )
 
     # ── 4. robot_state_publisher ──────────────────────────────────────────────

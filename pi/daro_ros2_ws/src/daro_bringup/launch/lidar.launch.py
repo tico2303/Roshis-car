@@ -44,6 +44,21 @@ def generate_launch_description():
         }],
     )
 
+    # --- Explicit static TF: base_link -> laser ---
+    # robot_state_publisher publishes this from the URDF but uses a zero
+    # timestamp, which SLAM Toolbox rejects during TF lookups.
+    # A dedicated static_transform_publisher fixes this — it broadcasts
+    # with wall-clock time and is always retained in the TF buffer.
+    # Values must match the laser_joint origin in daro_min.urdf:
+    #   xyz="0.08 0 0.10" rpy="0 0 0"
+    base_link_to_laser = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="base_link_to_laser",
+        output="screen",
+        arguments=["0.08", "0", "0.10", "0", "0", "0", "base_link", "laser"],
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             "lidar_params",
@@ -57,5 +72,6 @@ def generate_launch_description():
         ),
 
         robot_state_publisher,
+        base_link_to_laser,
         lidar_node,
     ])

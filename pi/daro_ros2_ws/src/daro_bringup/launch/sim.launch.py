@@ -83,7 +83,6 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "config_file": bridge_yaml,
-            "use_sim_time": True,
         }],
     )
 
@@ -169,8 +168,8 @@ def generate_launch_description():
             gz_bridge,
         ]),
 
-        # SLAM needs TF from the diff-drive bridge to be flowing first
-        TimerAction(period=8.0,  actions=[slam_node]),
-        TimerAction(period=11.0, actions=[configure_slam]),
-        TimerAction(period=13.0, actions=[activate_slam]),
+        # SLAM disabled temporarily - enable once bridge is stable
+        # TimerAction(period=8.0,  actions=[slam_node]),
+        # TimerAction(period=11.0, actions=[configure_slam]),
+        # TimerAction(period=13.0, actions=[activate_slam]),
     ])

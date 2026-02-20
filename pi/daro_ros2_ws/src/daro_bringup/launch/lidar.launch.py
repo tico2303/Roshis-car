@@ -12,11 +12,15 @@ def generate_launch_description():
     bringup_share = get_package_share_directory("daro_bringup")
     description_share = get_package_share_directory("daro_description")
 
-    default_params = os.path.join(bringup_share, "config", "lidar.yaml")
+    default_lidar_params = os.path.join(bringup_share, "config", "lidar.yaml")
     default_urdf = os.path.join(description_share, "urdf", "daro_min.urdf")
 
-    params_file = LaunchConfiguration("params_file")
-    urdf_file = LaunchConfiguration("urdf_file")
+    # Use a specific arg name (lidar_params) to avoid colliding with the
+    # generic "params_file" arg declared by daro.launch.py, which defaults
+    # to daro.yaml and would otherwise be inherited when this launch file is
+    # included transitively via robot.launch.py -> slam.launch.py -> here.
+    lidar_params = LaunchConfiguration("lidar_params")
+    log_level = LaunchConfiguration("log_level")
 
     # --- LiDAR driver ---
     lidar_node = Node(
@@ -24,12 +28,12 @@ def generate_launch_description():
         executable="sllidar_node",
         name="sllidar",
         output="screen",
-        parameters=[params_file],
+        parameters=[lidar_params],
         respawn=True,
         respawn_delay=2.0,
     )
 
-    # --- TF from URDF --- (possibly remove later and just keep in daro.launch)
+    # --- TF from URDF ---
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
@@ -42,21 +46,16 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument(
-            "params_file",
-            default_value=default_params,
+            "lidar_params",
+            default_value=default_lidar_params,
             description="Path to lidar YAML params file",
         ),
         DeclareLaunchArgument(
-            "urdf_file",
-            default_value=default_urdf,
-            description="Path to robot URDF used for TF via robot_state_publisher",
+            "log_level",
+            default_value="info",
+            description="ROS log level",
         ),
-
-        # NOTE: We read default_urdf above. If you want urdf_file overrides to work,
-        # replace open(default_urdf, ...) with open(urdf_file.perform(...)) pattern via OpaqueFunction.
-        # For now: keep it simple and stable.
 
         robot_state_publisher,
         lidar_node,
-
     ])

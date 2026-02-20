@@ -54,7 +54,7 @@ def generate_launch_description():
 
     # ── 1. Gazebo world ───────────────────────────────────────────────────────
     gazebo = ExecuteProcess(
-        cmd=["gz", "sim", world_file, "-r"],   # -r = start running immediately
+        cmd=["gz", "sim", world_file, "-r", "-s", "--headless-rendering"],
         output="screen",
     )
 

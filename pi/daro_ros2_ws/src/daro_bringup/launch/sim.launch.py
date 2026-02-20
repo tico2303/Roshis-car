@@ -47,6 +47,7 @@ def generate_launch_description():
     urdf_file   = os.path.join(description, "urdf",   "daro_min.urdf")
     slam_params = os.path.join(bringup,     "config", "slam.yaml")
     teleop_yaml = os.path.join(bringup,     "config", "teleop_joy.yaml")
+    bridge_yaml = os.path.join(bringup,     "config", "gz_bridge.yaml")
     rviz_cfg    = os.path.join(bringup,     "rviz",   "slam.rviz")
 
     use_rviz  = LaunchConfiguration("rviz")
@@ -74,26 +75,14 @@ def generate_launch_description():
     )
 
     # ── 3. Gazebo <-> ROS2 topic bridge ───────────────────────────────────────
-    # [  = Gz->ROS,  ] = ROS->Gz,  @ = bidirectional
+    # Uses a YAML config for unambiguous direction control.
+    # See config/gz_bridge.yaml for the full mapping.
     gz_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
         name="gz_bridge",
         output="screen",
-        arguments=[
-            # LiDAR scans: Gz -> ROS
-            "/scan@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
-            # Odometry from diff-drive plugin: Gz -> ROS
-            "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
-            # Drive commands: ROS -> Gz
-            "/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
-            # TF (odom->base_link from diff-drive): Gz -> ROS
-            "/tf@tf2_msgs/msg/TFMessage[gz.msgs.Pose_V",
-            # Joint states: Gz -> ROS
-            "/joint_states@sensor_msgs/msg/JointState[gz.msgs.Model",
-            # Sim clock: Gz -> ROS  (all nodes use use_sim_time:=true)
-            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
-        ],
+        parameters=[{"config_file": bridge_yaml}],
     )
 
     # ── 4. robot_state_publisher ──────────────────────────────────────────────

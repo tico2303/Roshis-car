@@ -4,7 +4,7 @@
 
 ndjson_bridge_node:
   ros__parameters:
-    port: "/dev/ttyUSB0"
+    port: "/dev/esp32"
     baud: 115200
 
 tof_to_range_node:

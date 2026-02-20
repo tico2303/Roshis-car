@@ -46,7 +46,6 @@ def generate_launch_description():
     robot_sdf   = os.path.join(description, "urdf",   "daro.sdf")
     urdf_file   = os.path.join(description, "urdf",   "daro_min.urdf")
     slam_params = os.path.join(bringup,     "config", "slam.yaml")
-    teleop_yaml = os.path.join(bringup,     "config", "teleop_joy.yaml")
     bridge_yaml = os.path.join(bringup,     "config", "gz_bridge.yaml")
     rviz_cfg    = os.path.join(bringup,     "rviz",   "slam.rviz")
 
@@ -131,24 +130,10 @@ def generate_launch_description():
         output="screen",
     )
 
-    # ── 6. Joystick + teleop (same as real robot) ─────────────────────────────
-    joy_node = Node(
-        package="joy",
-        executable="joy_node",
-        name="joy_node",
-        output="screen",
-        parameters=[{"use_sim_time": True}],
-    )
+    # NOTE: joy_node + teleop_node run on the Pi (where the controller is connected).
+    # They publish /cmd_vel over DDS which the bridge forwards to Gazebo.
 
-    teleop_node = Node(
-        package="teleop_twist_joy",
-        executable="teleop_node",
-        name="teleop_twist_joy",
-        output="screen",
-        parameters=[teleop_yaml, {"use_sim_time": True}],
-    )
-
-    # ── 7. Optional RViz ──────────────────────────────────────────────────────
+    # ── 6. Optional RViz ──────────────────────────────────────────────────────
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
@@ -174,8 +159,6 @@ def generate_launch_description():
             gz_bridge,
             robot_state_publisher,
             base_link_to_laser,
-            joy_node,
-            teleop_node,
             rviz_node,
         ]),
 

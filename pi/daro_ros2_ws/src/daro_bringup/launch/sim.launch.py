@@ -156,17 +156,21 @@ def generate_launch_description():
         # Gazebo world first
         gazebo,
 
-        # Spawn robot + start all ROS2 nodes once Gazebo is up
-        TimerAction(period=2.0, actions=[
+        # Spawn robot once Gazebo is up
+        TimerAction(period=3.0, actions=[
             spawn_robot,
-            gz_bridge,
             robot_state_publisher,
             base_link_to_laser,
             rviz_node,
         ]),
 
+        # Bridge starts after robot is spawned (needs Gazebo topics to exist)
+        TimerAction(period=5.0, actions=[
+            gz_bridge,
+        ]),
+
         # SLAM needs TF from the diff-drive bridge to be flowing first
-        TimerAction(period=5.0,  actions=[slam_node]),
-        TimerAction(period=7.0,  actions=[configure_slam]),
-        TimerAction(period=9.0,  actions=[activate_slam]),
+        TimerAction(period=8.0,  actions=[slam_node]),
+        TimerAction(period=11.0, actions=[configure_slam]),
+        TimerAction(period=13.0, actions=[activate_slam]),
     ])

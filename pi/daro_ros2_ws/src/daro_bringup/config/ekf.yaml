@@ -2,7 +2,7 @@ ekf_filter_node:
   ros__parameters:
     frequency: 50.0
     sensor_timeout: 0.2
-    two_d_mode: true
+    two_d_mode: true # daro doesn't fly... yet
 
     map_frame: map
     odom_frame: odom
@@ -16,8 +16,8 @@ ekf_filter_node:
     odom0_config: [
       true,  true,  false,   # x, y, z
       false, false, true,    # roll, pitch, yaw
-      true,  false, false,   # vx, vy, vz
-      false, false, true,    # vroll, vpitch, vyaw
+      true,  false, false,   # vx, vy, vz (forward velocity)
+      false, false, true,    # vroll, vpitch, vyaw (yaw rate used)
       false, false, false
     ]
     odom0_queue_size: 10

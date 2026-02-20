@@ -14,7 +14,7 @@
 -->
 <sdf version="1.8">
   <model name="daro">
-    <pose>0 0 0.03 0 0 0</pose>  <!-- spawn just above ground -->
+    <pose>0 0 0 0 0 0</pose>
 
     <!-- ── Chassis ─────────────────────────────────────────────────────── -->
     <link name="base_link">
@@ -30,7 +30,7 @@
       </inertial>
 
       <visual name="chassis_visual">
-        <pose>0 0 0.0254 0 0 0</pose>
+        <pose>0 0 0.055 0 0 0</pose>
         <geometry>
           <box><size>0.2413 0.0762 0.0508</size></box>
         </geometry>
@@ -41,7 +41,7 @@
       </visual>
 
       <collision name="chassis_collision">
-        <pose>0 0 0.0254 0 0 0</pose>
+        <pose>0 0 0.055 0 0 0</pose>
         <geometry>
           <box><size>0.2413 0.0762 0.0508</size></box>
         </geometry>
@@ -50,7 +50,7 @@
 
     <!-- ── Left wheel ─────────────────────────────────────────────────── -->
     <link name="left_wheel">
-      <pose>0 0.08 0.03 -1.5707963 0 0</pose>
+      <pose>0 0.08 0.03 1.5707963 0 0</pose>
       <inertial>
         <mass>0.1</mass>
         <inertia>
@@ -88,7 +88,7 @@
 
     <!-- ── Right wheel ────────────────────────────────────────────────── -->
     <link name="right_wheel">
-      <pose>0 -0.08 0.03 -1.5707963 0 0</pose>
+      <pose>0 -0.08 0.03 1.5707963 0 0</pose>
       <inertial>
         <mass>0.1</mass>
         <inertia>
@@ -126,7 +126,7 @@
 
     <!-- ── Front caster (ball) ────────────────────────────────────────── -->
     <link name="caster">
-      <pose>0.09 0 0.005 0 0 0</pose>
+      <pose>0.09 0 0.01 0 0 0</pose>
       <inertial>
         <mass>0.05</mass>
         <inertia>

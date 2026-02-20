@@ -34,6 +34,7 @@ def generate_launch_description():
     # Launch arguments
     # -------------------------------------------------
     slam_params = LaunchConfiguration("slam_params")
+    ekf_params  = LaunchConfiguration("ekf_params")
     log_level = LaunchConfiguration("log_level")
     use_localization = LaunchConfiguration("use_localization")
 
@@ -54,7 +55,10 @@ def generate_launch_description():
     # -------------------------------------------------
     include_localization = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(localization_launch),
-        launch_arguments={"log_level": log_level}.items(),
+        launch_arguments={
+            "ekf_params": ekf_params,
+            "log_level":  log_level,
+        }.items(),
         condition=IfCondition(use_localization),
     )
 
@@ -109,6 +113,12 @@ def generate_launch_description():
             "slam_params",
             default_value=default_slam_params,
             description="Path to slam_toolbox YAML params file",
+        ),
+
+        DeclareLaunchArgument(
+            "ekf_params",
+            default_value=os.path.join(bringup, "config", "ekf.yaml"),
+            description="Path to robot_localization EKF params YAML",
         ),
 
         DeclareLaunchArgument(

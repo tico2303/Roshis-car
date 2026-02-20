@@ -53,9 +53,13 @@ def generate_launch_description():
     log_level = LaunchConfiguration("log_level")
 
     # ── 1. Gazebo world ───────────────────────────────────────────────────────
+    # -s = server only (no GUI), --headless-rendering = EGL software rendering
+    # DISPLAY= forces EGL path so ogre2 works without X/GPU for sensor rendering
+    # Run GUI separately with: gz sim -g
     gazebo = ExecuteProcess(
-        cmd=["gz", "sim", world_file, "-r", "-s", "--headless-rendering"],
+        cmd=["gz", "sim", world_file, "-r", "-s", "--headless-rendering", "-v", "4"],
         output="screen",
+        additional_env={"DISPLAY": ""},
     )
 
     # ── 2. Spawn DARO into the world ──────────────────────────────────────────

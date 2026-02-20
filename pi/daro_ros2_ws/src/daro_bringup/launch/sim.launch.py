@@ -84,7 +84,6 @@ def generate_launch_description():
         parameters=[{
             "config_file": bridge_yaml,
             "use_sim_time": True,
-            "lazy": False,
         }],
     )
 

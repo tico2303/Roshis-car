@@ -37,7 +37,7 @@ slam_toolbox:
     # Large TF buffer so old transforms aren't evicted under load.
     tf_buffer_duration: 30.0
 
-    use_sim_time: false
+    # use_sim_time is set by the launch file (false for real, true for sim)
 
     # SLAM Toolbox publishes map->odom.  odom->base_link comes from EKF
     # (use_localization:=true) or the static publisher (standalone).

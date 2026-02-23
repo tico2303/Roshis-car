@@ -141,7 +141,7 @@ class NdjsonBridgeNode(Node):
         # RX uses a manual byte buffer instead of readline() for
         # reliable framing even when pyserial returns partial reads.
         self._rx_buf = bytearray()
-        self._rx_thread = threading.Thread(target=self._rx_loop, daemon=True)
+        self._rx_thread = threading.Thread(target=self._rx_loop, daemon=False)
 
         # TX queue — all serial writes go through the RX thread to avoid
         # concurrent read/write on the CP2102, which causes byte loss.
@@ -457,7 +457,12 @@ class NdjsonBridgeNode(Node):
         self._tx_count_10s = 0
 
     def destroy_node(self) -> bool:
+        # Signal the RX thread to stop, then wait for it to exit before
+        # closing the port. This ensures the serial fd is released cleanly
+        # and /dev/ttyUSB0 (or /dev/esp32) is unlocked on Ctrl-C.
         self._stop.set()
+        if self._rx_thread.is_alive():
+            self._rx_thread.join(timeout=2.0)
         self._close_serial()
         return super().destroy_node()
 
@@ -468,6 +473,8 @@ def main() -> None:
     try:
         node = NdjsonBridgeNode()
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass  # clean shutdown — destroy_node() in finally handles the port
     finally:
         if node is not None:
             node.destroy_node()

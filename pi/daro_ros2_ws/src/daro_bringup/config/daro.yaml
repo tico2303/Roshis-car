@@ -32,6 +32,10 @@ enc_json_node:
     left_joint: "left_wheel_joint"
     right_joint: "right_wheel_joint"
     ticks_per_rev: 660.0
+    # Sign correction for physically reversed motors (+1 or -1).
+    # If driving straight shows as a circle in RViz, flip one side.
+    left_sign: 1
+    right_sign: -1
 
 joy_buttons_node:
   ros__parameters:

@@ -12,7 +12,7 @@ twist_to_drv:
     cmd_timeout_s: 0.05
     publish_hz: 50.0
 
-    linear_sign: 1
+    linear_sign: -1
     angular_sign: -1
 
     # Left wheel slew (normalized units/sec, range is -1.0 to 1.0)

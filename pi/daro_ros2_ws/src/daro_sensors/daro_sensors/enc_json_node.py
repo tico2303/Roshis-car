@@ -37,6 +37,9 @@ class EncJsonNode(Node):
         self.declare_parameter("left_joint", "left_wheel_joint")
         self.declare_parameter("right_joint", "right_wheel_joint")
         self.declare_parameter("ticks_per_rev", 660.0)
+        # Sign correction for physically reversed motors/encoders (+1 or -1)
+        self.declare_parameter("left_sign", 1)
+        self.declare_parameter("right_sign", 1)
 
         rx_topic = str(self.get_parameter("rx_topic").value)
         pub_topic = str(self.get_parameter("pub_topic").value)
@@ -80,22 +83,24 @@ class EncJsonNode(Node):
         right_name = str(self.get_parameter("right_joint").value)
         ticks_per_rev = float(self.get_parameter("ticks_per_rev").value)
         rads_per_tick = (2.0 * math.pi) / ticks_per_rev
+        left_sign = float(self.get_parameter("left_sign").value)
+        right_sign = float(self.get_parameter("right_sign").value)
 
         left = obj["left"]
         right = obj["right"]
 
         js.name = [left_name, right_name]
 
-        # Position: total ticks -> radians
+        # Position: total ticks -> radians (sign-corrected for motor orientation)
         js.position = [
-            float(left["tot"]) * rads_per_tick,
-            float(right["tot"]) * rads_per_tick,
+            left_sign * float(left["tot"]) * rads_per_tick,
+            right_sign * float(right["tot"]) * rads_per_tick,
         ]
 
-        # Velocity: rad/s (already computed on ESP32)
+        # Velocity: rad/s (already computed on ESP32, sign-corrected)
         js.velocity = [
-            float(left["rad_s"]),
-            float(right["rad_s"]),
+            left_sign * float(left["rad_s"]),
+            right_sign * float(right["rad_s"]),
         ]
 
         # Effort: not measured

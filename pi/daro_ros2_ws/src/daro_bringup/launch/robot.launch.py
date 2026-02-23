@@ -7,17 +7,23 @@ Composes:
   slam.launch.py   — LiDAR, robot_state_publisher, EKF, SLAM Toolbox
 
 Usage (on the Pi):
-  # Full robot + SLAM (no RViz — Pi headless):
-  ros2 launch daro_bringup robot.launch.py
-
-  # With RViz on the Pi (if display is attached):
+  # Full robot + SLAM + RViz + keyboard teleop:
   ros2 launch daro_bringup robot.launch.py rviz:=true
 
+  # Without keyboard teleop:
+  ros2 launch daro_bringup robot.launch.py rviz:=true keyboard:=false
+
   # Override serial port or baud:
-  ros2 launch daro_bringup robot.launch.py esp_port:=/dev/ttyUSB0 baud:=460800
+  ros2 launch daro_bringup robot.launch.py rviz:=true esp_port:=/dev/ttyUSB0 baud:=460800
 
 RViz on macOS (run this in the Docker container after sourcing ROS2):
   rviz2 -d <path-to>/daro_bringup/rviz/slam.rviz
+
+Keyboard controls (when keyboard:=true):
+  i / , — forward / backward
+  j / l — rotate left / right
+  k     — stop
+  q / z — increase / decrease max speed
 """
 import os
 
@@ -47,6 +53,7 @@ def generate_launch_description():
     esp_port       = LaunchConfiguration("esp_port")
     baud           = LaunchConfiguration("baud")
     rviz           = LaunchConfiguration("rviz")
+    keyboard       = LaunchConfiguration("keyboard")
     slam_params    = LaunchConfiguration("slam_params")
     ekf_params     = LaunchConfiguration("ekf_params")
 
@@ -86,6 +93,18 @@ def generate_launch_description():
         condition=IfCondition(rviz),
     )
 
+    # Optional keyboard teleoperation — runs in an xterm so it can read stdin.
+    # Publishes to /cmd_vel, same topic as the joystick, so twist_to_drv
+    # picks it up without any remapping.
+    keyboard_node = Node(
+        package="teleop_twist_keyboard",
+        executable="teleop_twist_keyboard",
+        name="teleop_twist_keyboard",
+        output="screen",
+        prefix="xterm -e",
+        condition=IfCondition(keyboard),
+    )
+
     # ── Compose ───────────────────────────────────────────────────────────────
     return LaunchDescription([
 
@@ -96,6 +115,8 @@ def generate_launch_description():
                               description="ESP32 serial baud rate"),
         DeclareLaunchArgument("rviz",        default_value="false",
                               description="Launch RViz2 on this machine"),
+        DeclareLaunchArgument("keyboard",    default_value="true",
+                              description="Launch teleop_twist_keyboard in an xterm window"),
         DeclareLaunchArgument("slam_params", default_value=os.path.join(
                                   bringup, "config", "slam.yaml"),
                               description="Path to slam_toolbox params YAML"),
@@ -108,4 +129,5 @@ def generate_launch_description():
         include_slam,
 
         rviz_node,
+        keyboard_node,
     ])

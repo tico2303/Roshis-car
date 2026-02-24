@@ -24,6 +24,7 @@ def generate_launch_description():
     esp32_bridge_launch = os.path.join(launch_dir, "esp32_bridge.launch.py")
 
     twist_to_drv_yaml = os.path.join(cfg_dir, "twist_to_drv.yaml")
+    wheel_odom_yaml = os.path.join(cfg_dir, "wheel_odom.yaml")
 
     joy_buttons_params_yaml = os.path.join(cfg_dir, "joy_buttons_params.yaml")
 
@@ -110,15 +111,7 @@ def generate_launch_description():
         executable="wheel_odom",  # console_scripts name
         name="wheel_odom_node",
         output="screen",
-        parameters=[{
-            "wheel_radius_m": 0.03,
-            "wheel_separation_m": 0.16,
-            "publish_tf": False,          # EKF will publish TF
-            "joint_states_topic": "/wheel/joint_states",
-            "odom_topic": "/wheel/odom",
-            "odom_frame": "odom",
-            "base_frame": "base_link",
-        }],
+        parameters=[wheel_odom_yaml],
         arguments=["--ros-args", "--log-level", log_level],
     )
     return LaunchDescription([

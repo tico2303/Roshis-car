@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-robot.launch.py — full DARO robot bringup with SLAM and optional RViz.
+robot.launch.py — full DARO robot bringup with optional SLAM and RViz.
 
 Composes:
   daro.launch.py   — ESP32 bridge, joystick, drive, sensors, wheel odometry
@@ -12,6 +12,9 @@ Usage (on the Pi):
 
   # Without keyboard teleop:
   ros2 launch daro_bringup robot.launch.py rviz:=true keyboard:=false
+
+  # Hardware + EKF + LiDAR only (no SLAM — used by daro_nav for AMCL navigation):
+  ros2 launch daro_bringup robot.launch.py slam:=false
 
   # Override serial port or baud:
   ros2 launch daro_bringup robot.launch.py rviz:=true esp_port:=/dev/ttyUSB0 baud:=460800
@@ -34,7 +37,7 @@ from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
 )
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, LaunchConfigurationEquals
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
@@ -54,6 +57,7 @@ def generate_launch_description():
     baud           = LaunchConfiguration("baud")
     rviz           = LaunchConfiguration("rviz")
     keyboard       = LaunchConfiguration("keyboard")
+    slam           = LaunchConfiguration("slam")
     slam_params    = LaunchConfiguration("slam_params")
     ekf_params     = LaunchConfiguration("ekf_params")
 
@@ -73,6 +77,8 @@ def generate_launch_description():
     # use_localization:=true  →  EKF fuses /wheel/odom + /imu/data_raw
     #                             and publishes odom→base_link.
     #                             SLAM Toolbox then only publishes map→odom.
+    # When slam:=false (e.g. called from daro_nav nav.launch.py), SLAM Toolbox
+    # is skipped — AMCL handles the map→odom TF instead.
     include_slam = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(launch_dir, "slam.launch.py")),
         launch_arguments={
@@ -81,6 +87,7 @@ def generate_launch_description():
             "ekf_params":       ekf_params,
             "log_level":        log_level,
         }.items(),
+        condition=LaunchConfigurationEquals("slam", "true"),
     )
 
     # Optional RViz (useful if Pi has a display; normally run on macOS instead)
@@ -109,6 +116,8 @@ def generate_launch_description():
     return LaunchDescription([
 
         DeclareLaunchArgument("log_level",   default_value="info"),
+        DeclareLaunchArgument("slam",        default_value="true",
+                              description="Launch SLAM Toolbox for mapping (false = skip SLAM, e.g. when using AMCL nav)"),
         DeclareLaunchArgument("esp_port",    default_value=ESP_PORT,
                               description="ESP32 serial device"),
         DeclareLaunchArgument("baud",        default_value=BAUD,

@@ -22,8 +22,9 @@
   <exec_depend>nav2_navfn_planner</exec_depend>
   <exec_depend>nav2_dwb_controller</exec_depend>
 
-  <!-- Robot bringup (hardware stack) -->
+  <!-- Robot hardware and SLAM stacks -->
   <exec_depend>daro_bringup</exec_depend>
+  <exec_depend>daro_slam</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

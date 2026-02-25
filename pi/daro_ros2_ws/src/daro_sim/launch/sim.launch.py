@@ -6,12 +6,11 @@ What runs:
   - Gazebo with test_world.sdf (boxes, walls, pillar)
   - daro.sdf robot spawned at origin (blue box, two wheels, simulated LiDAR)
   - gz_bridge: /scan, /odom, /cmd_vel, /tf, /clock, /joint_states
-  - slam_common: robot_state_publisher, base_link→laser TF, SLAM Toolbox
-  - Optional RViz
+  - slam_core: robot_state_publisher, base_link→laser TF, SLAM Toolbox
 
 Usage:
-  ros2 launch daro_bringup sim.launch.py
-  ros2 launch daro_bringup sim.launch.py rviz:=true
+  ros2 launch daro_sim sim.launch.py
+  ros2 launch daro_sim sim.launch.py rviz:=true
 
 Drive with Xbox controller (same as real robot):
   Left stick Y = forward/back, Right stick X = turn
@@ -39,14 +38,15 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 
-    bringup     = get_package_share_directory("daro_bringup")
+    sim_share   = get_package_share_directory("daro_sim")
+    slam_share  = get_package_share_directory("daro_slam")
     description = get_package_share_directory("daro_description")
+    bringup     = get_package_share_directory("daro_bringup")
 
-    world_file       = os.path.join(bringup,     "worlds", "test_world.sdf")
-    robot_sdf        = os.path.join(description, "urdf",   "daro.sdf")
-    bridge_yaml      = os.path.join(bringup,     "config", "gz_bridge.yaml")
-    slam_common_launch = os.path.join(bringup,   "launch", "slam_common.launch.py")
-    rviz_cfg         = os.path.join(bringup,     "rviz",   "slam.rviz")
+    world_file  = os.path.join(sim_share,   "worlds", "test_world.sdf")
+    robot_sdf   = os.path.join(description, "urdf",   "daro.sdf")
+    bridge_yaml = os.path.join(sim_share,   "config", "gz_bridge.yaml")
+    rviz_cfg    = os.path.join(bringup,     "rviz",   "slam.rviz")
 
     use_rviz  = LaunchConfiguration("rviz")
     log_level = LaunchConfiguration("log_level")
@@ -82,16 +82,16 @@ def generate_launch_description():
         executable="parameter_bridge",
         name="gz_bridge",
         output="screen",
-        parameters=[{
-            "config_file": bridge_yaml,
-        }],
+        parameters=[{"config_file": bridge_yaml}],
     )
 
-    # ── 4. Shared SLAM stack (RSP, TF, SLAM Toolbox) ─────────────────────────
+    # ── 4. SLAM core: RSP, static TF, SLAM Toolbox ───────────────────────────
     # Gazebo DiffDrive publishes odom→base_link via gz_bridge, so we don't
     # need the static identity TF (publish_odom_tf:=false).
-    include_slam_common = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(slam_common_launch),
+    include_slam_core = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(slam_share, "launch", "slam_core.launch.py")
+        ),
         launch_arguments={
             "use_sim_time":    "true",
             "publish_odom_tf": "false",
@@ -125,7 +125,7 @@ def generate_launch_description():
         # Bridge + SLAM stack after robot is spawned (needs Gazebo topics)
         TimerAction(period=5.0, actions=[
             gz_bridge,
-            include_slam_common,
+            include_slam_core,
             rviz_node,
         ]),
     ])

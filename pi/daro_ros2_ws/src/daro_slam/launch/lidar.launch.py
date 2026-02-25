@@ -1,21 +1,18 @@
+#!/usr/bin/env python3
 import os
 
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from ament_index_python.packages import get_package_share_directory
-
 
 def generate_launch_description():
-    bringup_share = get_package_share_directory("daro_bringup")
-
-    default_lidar_params = os.path.join(bringup_share, "config", "lidar.yaml")
+    slam_share = get_package_share_directory("daro_slam")
 
     lidar_params = LaunchConfiguration("lidar_params")
 
-    # --- LiDAR driver ---
     lidar_node = Node(
         package="sllidar_ros2",
         executable="sllidar_node",
@@ -29,9 +26,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "lidar_params",
-            default_value=default_lidar_params,
+            default_value=os.path.join(slam_share, "config", "lidar.yaml"),
             description="Path to lidar YAML params file",
         ),
-
         lidar_node,
     ])

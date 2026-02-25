@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-slam_common.launch.py — Shared SLAM stack used by both sim and real robot.
+slam_core.launch.py — Shared SLAM infrastructure used by both real robot and simulation.
 
 Provides:
-  - robot_state_publisher (URDF TF)
-  - base_link→laser static TF
+  - robot_state_publisher (URDF → TF)
+  - base_link → laser static TF
   - SLAM Toolbox lifecycle node (configure + activate)
-  - Optional static odom→base_link identity (when no EKF or Gazebo)
+  - Optional static odom → base_link identity (when no EKF or Gazebo)
 
 Does NOT include a lidar driver — the caller is responsible for /scan:
   - Real robot: lidar.launch.py starts sllidar_node
@@ -31,11 +31,11 @@ from launch_ros.parameter_descriptions import ParameterFile
 
 def generate_launch_description():
 
-    bringup     = get_package_share_directory("daro_bringup")
+    slam_share  = get_package_share_directory("daro_slam")
     description = get_package_share_directory("daro_description")
 
-    default_slam_params = os.path.join(bringup,     "config", "slam.yaml")
-    default_urdf        = os.path.join(description, "urdf",   "daro_min.urdf")
+    default_slam_params = os.path.join(slam_share,   "config", "slam.yaml")
+    default_urdf        = os.path.join(description,  "urdf",   "daro_min.urdf")
 
     slam_params      = LaunchConfiguration("slam_params")
     log_level        = LaunchConfiguration("log_level")

@@ -3,12 +3,15 @@
 nav.launch.py — Full DARO autonomous navigation stack.
 
 Composes:
-  robot.launch.py (daro_bringup) — hardware, EKF, LiDAR  [slam:=false]
-  nav2_stack.launch.py (daro_nav) — AMCL + Nav2 planners + lifecycle manager
+  daro_bringup/daro.launch.py       — ESP32, sensors, joystick, drive, wheel odom
+  daro_slam/lidar.launch.py         — SLLIDAR hardware driver → /scan
+  daro_slam/localization.launch.py  — EKF: fuses /wheel/odom + /imu/data_raw
+  daro_slam/slam_core.launch.py     — RSP + static TF (no SLAM Toolbox)
+  daro_nav/nav2_stack.launch.py     — AMCL + Nav2 planners + lifecycle manager
 
 Prerequisites:
   1. A saved map — create one first with SLAM:
-       ros2 launch daro_bringup robot.launch.py
+       ros2 launch daro_slam slam.launch.py
        # drive the robot around to build the map, then:
        ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
 
@@ -19,7 +22,7 @@ Usage:
   ros2 launch daro_nav nav.launch.py map:=/home/pi/maps/my_map.yaml esp_port:=/dev/ttyUSB0
 
 RViz (on macOS Docker or Pi with display):
-  rviz2 -d <daro_bringup>/rviz/nav.rviz
+  rviz2 -d <daro_bringup>/rviz/slam.rviz
   # Then use "2D Pose Estimate" to initialize AMCL, and "2D Nav Goal" to send goals.
 
 Tuning:
@@ -38,6 +41,7 @@ from daro_bringup.defaults import ESP_PORT, BAUD
 def generate_launch_description():
 
     bringup_share  = get_package_share_directory("daro_bringup")
+    slam_share     = get_package_share_directory("daro_slam")
     daro_nav_share = get_package_share_directory("daro_nav")
 
     # ── Launch arguments ──────────────────────────────────────────────────────
@@ -45,33 +49,58 @@ def generate_launch_description():
     map_yaml     = LaunchConfiguration("map")
     nav2_params  = LaunchConfiguration("nav2_params")
     ekf_params   = LaunchConfiguration("ekf_params")
+    slam_params  = LaunchConfiguration("slam_params")
     esp_port     = LaunchConfiguration("esp_port")
     baud         = LaunchConfiguration("baud")
     log_level    = LaunchConfiguration("log_level")
     use_sim_time = LaunchConfiguration("use_sim_time")
 
-    # ── Hardware stack (no SLAM — AMCL handles localization) ──────────────────
-    # robot.launch.py is called with slam:=false so SLAM Toolbox is not started.
-    # The EKF still runs (via use_localization:=true inside slam.launch.py),
-    # publishing the odom→base_link TF that Nav2 needs.
-
-    include_robot = IncludeLaunchDescription(
+    # ── Hardware: ESP32, sensors, joystick, drive ─────────────────────────────
+    include_daro = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "robot.launch.py")
+            os.path.join(bringup_share, "launch", "daro.launch.py")
         ),
         launch_arguments={
             "esp_port":  esp_port,
             "baud":      baud,
             "log_level": log_level,
-            "slam":      "false",   # AMCL replaces SLAM Toolbox for map→odom TF
-            "rviz":      "false",   # launch RViz separately if needed
-            "keyboard":  "false",   # Nav2 commands /cmd_vel; disable manual teleop
+        }.items(),
+    )
+
+    # ── LiDAR hardware driver → /scan ─────────────────────────────────────────
+    include_lidar = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(slam_share, "launch", "lidar.launch.py")
+        ),
+    )
+
+    # ── EKF: fuses wheel odom + IMU → odom→base_link TF ──────────────────────
+    include_localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(slam_share, "launch", "localization.launch.py")
+        ),
+        launch_arguments={
             "ekf_params": ekf_params,
+            "log_level":  log_level,
+        }.items(),
+    )
+
+    # ── SLAM core: RSP + static TF only (no SLAM Toolbox) ────────────────────
+    # AMCL (in nav2_stack) publishes map→odom — we don't need SLAM Toolbox.
+    # EKF publishes odom→base_link, so suppress the static identity TF.
+    include_slam_core = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(slam_share, "launch", "slam_core.launch.py")
+        ),
+        launch_arguments={
+            "slam_params":     slam_params,
+            "use_sim_time":    use_sim_time,
+            "publish_odom_tf": "false",  # EKF handles odom→base_link
+            "log_level":       log_level,
         }.items(),
     )
 
     # ── Nav2 stack (AMCL + map server + planners + lifecycle) ─────────────────
-
     include_nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(daro_nav_share, "launch", "nav2_stack.launch.py")
@@ -98,8 +127,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "ekf_params",
-            default_value=os.path.join(bringup_share, "config", "ekf.yaml"),
+            default_value=os.path.join(slam_share, "config", "ekf.yaml"),
             description="Path to EKF parameters YAML",
+        ),
+        DeclareLaunchArgument(
+            "slam_params",
+            default_value=os.path.join(slam_share, "config", "slam.yaml"),
+            description="Path to SLAM core parameters YAML (RSP/TF only in nav mode)",
         ),
         DeclareLaunchArgument(
             "esp_port",
@@ -123,6 +157,9 @@ def generate_launch_description():
         ),
 
         # Hardware must come up before Nav2 so topics/TF are available
-        include_robot,
+        include_daro,
+        include_lidar,
+        include_localization,
+        include_slam_core,
         include_nav2,
     ])

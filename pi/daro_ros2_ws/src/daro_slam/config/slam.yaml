@@ -42,3 +42,6 @@ slam_toolbox:
     # SLAM Toolbox publishes map->odom.  odom->base_link comes from EKF
     # (use_localization:=true) or the static publisher (standalone).
     publish_tf: true
+
+    minimum_travel_distance: 0.1 # meters before processing new scan
+    minimum_travel_heading: 0.1 #radians before processing new scan

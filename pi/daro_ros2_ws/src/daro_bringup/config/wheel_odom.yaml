@@ -1,7 +1,7 @@
 wheel_odom_node:
   ros__parameters:
     # Physical wheel dimensions
-    wheel_radius_m: 0.09        # wheel radius (not diameter)
+    wheel_radius_m: 0.045        # wheel radius (not diameter)
     wheel_separation_m: 0.24   # centre-to-centre track width
 
     # Odometry output

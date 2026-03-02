@@ -1,39 +1,136 @@
 <?xml version="1.0"?>
 <robot name="daro_min">
 
-  <!-- Daros body simple box -->
+  <!--
+    Coordinate frame: base_link at geometric centre of chassis footprint, at floor level.
+    X = forward (toward front of robot), Y = left, Z = up.
+
+    Measured dimensions:
+      Chassis:  8.75" (L) x 7.75" (W)  →  0.2223 m x 0.1969 m
+      Wheels:   9 cm diameter (0.045 m radius)
+                9.5" (0.2413 m) apart centre-to-centre  →  y = ±0.1207 m
+                7.25" from front on 8.75" car  →  x = -(8.75/2 - (8.75-7.25))" = -2.875" = -0.0730 m
+                Extend ~1" beyond frame on each side
+      Caster:   1" diameter (0.0127 m radius), passive
+                front-centre of chassis  →  x = +0.1112 m, y = 0
+                3/4" gap under base, sits ~same height as drive wheels
+      LiDAR:    7.25" from front  →  x = -0.0730 m (above wheel axle line)
+                centred laterally  →  y = 0
+                1.6" above base   →  z = 0.0406 m
+  -->
+
+  <!-- ── Chassis ──────────────────────────────────────────────────── -->
   <link name="base_link">
     <visual>
-      <origin xyz="0 0 0.0254" rpy="0 0 0"/>
+      <!-- origin at chassis centre, half-height up (assuming ~1" tall chassis) -->
+      <origin xyz="0 0 0.0127" rpy="0 0 0"/>
       <geometry>
-        <!-- x=length, y=width, z=height (meters) -->
-        <box size="0.2413 0.0762 0.0508"/>
+        <!-- x=length 8.75", y=width 7.75", z=height 1" (assumed) -->
+        <box size="0.2223 0.1969 0.0254"/>
       </geometry>
       <material name="blue">
         <color rgba="0 0 1 1"/>
       </material>
     </visual>
-
-    <!-- collision same as visual -->
     <collision>
-      <origin xyz="0 0 0.0254" rpy="0 0 0"/>
+      <origin xyz="0 0 0.0127" rpy="0 0 0"/>
       <geometry>
-        <box size="0.2413 0.0762 0.0508"/>
+        <box size="0.2223 0.1969 0.0254"/>
       </geometry>
     </collision>
-
-    <!--TODO mass/inertia -->
   </link>
 
-  <!-- LiDAR frame -->
+  <!-- ── Left wheel ───────────────────────────────────────────────── -->
+  <link name="left_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.045" length="0.025"/>
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.15 0.15 0.15 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.045" length="0.025"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel"/>
+    <!-- x: -0.0730 m behind centre; y: +0.1207 m left; z: wheel radius (sits on ground) -->
+    <origin xyz="-0.0730 0.1207 0.045" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <!-- ── Right wheel ──────────────────────────────────────────────── -->
+  <link name="right_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.045" length="0.025"/>
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.15 0.15 0.15 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.045" length="0.025"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel"/>
+    <!-- x: -0.0730 m behind centre; y: -0.1207 m right; z: wheel radius -->
+    <origin xyz="-0.0730 -0.1207 0.045" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <!-- ── Front caster (passive, unpowered) ───────────────────────── -->
+  <link name="caster_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <!-- 1" diameter sphere -->
+        <sphere radius="0.0127"/>
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.15 0.15 0.15 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.0127"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="caster_wheel"/>
+    <!-- x: +0.1112 m (front of chassis); y: 0 (centred); z: 0.0127 m (radius, on ground) -->
+    <origin xyz="0.1112 0 0.0127" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ── LiDAR frame ──────────────────────────────────────────────── -->
   <link name="laser"/>
 
-  <!-- Fixed mount of lidar relative to base_link -->
   <joint name="laser_joint" type="fixed">
     <parent link="base_link"/>
     <child link="laser"/>
-    <!-- temp lidar position; fix later -->
-    <origin xyz="0.08 0 0.10" rpy="0 0 0"/>
+    <!-- x: -0.0730 m (7.25" from front = same as wheel axle line)
+         y:  0.0    (centred)
+         z:  0.0406 m (1.6" above base) -->
+    <origin xyz="-0.0730 0 0.0406" rpy="0 0 0"/>
   </joint>
 
 </robot>

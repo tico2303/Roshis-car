@@ -8,6 +8,7 @@ The hardware stack (EKF, LiDAR, etc.) must already be running.
 
 Usage (standalone):
   ros2 launch daro_nav nav2_stack.launch.py map:=/home/pi/maps/my_map.yaml
+  ros2 launch daro_nav nav2_stack.launch.py map:=~/maps/my_map.yaml   # ~ supported
 
 Usage (via nav.launch.py — preferred):
   ros2 launch daro_nav nav.launch.py map:=/home/pi/maps/my_map.yaml
@@ -16,21 +17,22 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def generate_launch_description():
-
-    daro_nav_share = get_package_share_directory("daro_nav")
-
-    # ── Launch arguments ──────────────────────────────────────────────────────
-
-    map_yaml     = LaunchConfiguration("map")
-    params       = LaunchConfiguration("nav2_params")
-    log_level    = LaunchConfiguration("log_level")
-    use_sim_time = LaunchConfiguration("use_sim_time")
+def _make_nodes(context, *args, **kwargs):
+    """
+    OpaqueFunction callback — runs at launch time so LaunchConfiguration
+    values are fully resolved and we can call os.path.expanduser on the
+    map path.
+    """
+    map_yaml     = os.path.expanduser(LaunchConfiguration("map").perform(context))
+    params       = LaunchConfiguration("nav2_params").perform(context)
+    log_level    = LaunchConfiguration("log_level").perform(context)
+    use_sim_time = LaunchConfiguration("use_sim_time").perform(context)
+    sim_time_bool = use_sim_time.lower() in ("true", "1", "yes")
 
     # ── Lifecycle node list (managed by lifecycle_manager) ────────────────────
     lifecycle_nodes = [
@@ -44,106 +46,75 @@ def generate_launch_description():
         "velocity_smoother",
     ]
 
-    # Common kwargs shared by every lifecycle node
-    def nav2_node(executable, name=None, **kwargs):
-        return Node(
-            package="nav2_" + executable.replace("_server", "").replace("_navigator", "").replace("bt_", "bt_"),
-            executable=executable,
-            name=name or executable,
-            output="screen",
-            respawn=True,
-            respawn_delay=2.0,
-            parameters=[params, {"use_sim_time": use_sim_time}],
-            arguments=["--ros-args", "--log-level", log_level],
-            **kwargs,
-        )
+    common = dict(
+        output="screen",
+        respawn=True,
+        respawn_delay=2.0,
+        arguments=["--ros-args", "--log-level", log_level],
+    )
 
     map_server_node = Node(
         package="nav2_map_server",
         executable="map_server",
         name="map_server",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time, "yaml_filename": map_yaml}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool, "yaml_filename": map_yaml}],
+        **common,
     )
 
     amcl_node = Node(
         package="nav2_amcl",
         executable="amcl",
         name="amcl",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     controller_server_node = Node(
         package="nav2_controller",
         executable="controller_server",
         name="controller_server",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     smoother_server_node = Node(
         package="nav2_smoother",
         executable="smoother_server",
         name="smoother_server",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     planner_server_node = Node(
         package="nav2_planner",
         executable="planner_server",
         name="planner_server",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     behavior_server_node = Node(
         package="nav2_behaviors",
         executable="behavior_server",
         name="behavior_server",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     bt_navigator_node = Node(
         package="nav2_bt_navigator",
         executable="bt_navigator",
         name="bt_navigator",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     velocity_smoother_node = Node(
         package="nav2_velocity_smoother",
         executable="velocity_smoother",
         name="velocity_smoother",
-        output="screen",
-        respawn=True,
-        respawn_delay=2.0,
-        parameters=[params, {"use_sim_time": use_sim_time}],
-        arguments=["--ros-args", "--log-level", log_level],
+        parameters=[params, {"use_sim_time": sim_time_bool}],
+        **common,
     )
 
     # ── Lifecycle manager: activates all Nav2 nodes in order ──────────────────
@@ -153,19 +124,35 @@ def generate_launch_description():
         name="lifecycle_manager_navigation",
         output="screen",
         parameters=[{
-            "use_sim_time": use_sim_time,
+            "use_sim_time": sim_time_bool,
             "autostart": True,
             "node_names": lifecycle_nodes,
         }],
         arguments=["--ros-args", "--log-level", log_level],
     )
 
-    # ── Compose ───────────────────────────────────────────────────────────────
+    return [
+        map_server_node,
+        amcl_node,
+        controller_server_node,
+        smoother_server_node,
+        planner_server_node,
+        behavior_server_node,
+        bt_navigator_node,
+        velocity_smoother_node,
+        lifecycle_manager_node,
+    ]
+
+
+def generate_launch_description():
+
+    daro_nav_share = get_package_share_directory("daro_nav")
+
     return LaunchDescription([
 
         DeclareLaunchArgument(
             "map",
-            description="Full path to the map .yaml file (created with map_saver_cli)",
+            description="Full path to the map .yaml file — ~ is expanded automatically",
         ),
         DeclareLaunchArgument(
             "nav2_params",
@@ -183,13 +170,5 @@ def generate_launch_description():
             description="ROS log level",
         ),
 
-        map_server_node,
-        amcl_node,
-        controller_server_node,
-        smoother_server_node,
-        planner_server_node,
-        behavior_server_node,
-        bt_navigator_node,
-        velocity_smoother_node,
-        lifecycle_manager_node,
+        OpaqueFunction(function=_make_nodes),
     ])

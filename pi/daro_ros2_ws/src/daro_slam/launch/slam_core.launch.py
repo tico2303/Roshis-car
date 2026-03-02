@@ -57,21 +57,6 @@ def generate_launch_description():
     )
 
     # -------------------------------------------------
-    # Static TF: base_link → laser
-    # robot_state_publisher publishes this from the URDF but uses a zero
-    # timestamp which SLAM Toolbox rejects.  A dedicated publisher fixes it.
-    # Values match laser_joint origin in daro_min.urdf: xyz="0.08 0 0.10"
-    # -------------------------------------------------
-    base_link_to_laser = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_link_to_laser",
-        output="screen",
-        arguments=["0.08", "0", "0.10", "0", "0", "0", "base_link", "laser"],
-        parameters=[{"use_sim_time": use_sim_time}],
-    )
-
-    # -------------------------------------------------
     # Static odom → base_link identity (when no EKF / no Gazebo DiffDrive)
     # Callers that get odom→base_link from elsewhere (EKF, Gazebo) should
     # set publish_odom_tf:=false.
@@ -142,7 +127,6 @@ def generate_launch_description():
         ),
 
         robot_state_publisher,
-        base_link_to_laser,
         static_odom_tf,
 
         slam_node,

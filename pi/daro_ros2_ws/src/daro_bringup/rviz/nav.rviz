@@ -160,6 +160,7 @@ Visualization Manager:
 
         # AMCL particle cloud — spread = localization uncertainty
         # Wide cloud = lost; tight cloud = confident
+        # AMCL publishes particle_cloud as Best Effort — must match here
         - Class: rviz_default_plugins/PoseArray
           Color: 0; 200; 0
           Enabled: true
@@ -169,7 +170,7 @@ Visualization Manager:
             Durability Policy: Volatile
             Filter size: 10
             History Policy: Keep Last
-            Reliability Policy: Reliable
+            Reliability Policy: Best Effort
             Value: /particle_cloud
           Arrow_Length: 0.1
           Value: true

@@ -87,7 +87,7 @@ planner_server:
     planner_plugins: ["GridBased"]
 
     GridBased:
-      plugin: "nav2_navfn_planner/NavfnPlanner"
+      plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.5           # goal tolerance (m) before declaring success
       use_astar: true          # A* is more consistent than Dijkstra
       allow_unknown: true      # plan through unknown cells

@@ -54,6 +54,10 @@ def generate_launch_description():
             "robot_description": open(default_urdf, "r").read(),
             "use_sim_time": use_sim_time,
         }],
+        # enc_json_node publishes wheel positions to /wheel/joint_states.
+        # RSP subscribes to /joint_states by default — remap so it receives
+        # wheel angles and can publish left_wheel and right_wheel TF frames.
+        remappings=[("/joint_states", "/wheel/joint_states")],
     )
 
     # -------------------------------------------------

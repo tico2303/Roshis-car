@@ -48,12 +48,12 @@
     #   output = input * scale
 
     scale_linear:
-      x: 1.0
+      x: -1.0    # corrects Xbox Left Stick Y axis polarity (negative when pushed forward)
       y: 0.0
       z: 0.0
 
     scale_angular:
-      yaw: 1.0
+      yaw: -1.0  # corrects Xbox Right Stick X axis polarity for turning
       pitch: 0.0
       roll: 0.0
 

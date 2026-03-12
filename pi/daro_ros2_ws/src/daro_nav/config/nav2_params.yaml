@@ -17,6 +17,15 @@ amcl:
   ros__parameters:
     use_sim_time: false
 
+    # Auto-publish map→odom TF on activation so downstream nodes (planner_server
+    # costmap) don't time out waiting for the map frame.  Use "2D Pose Estimate"
+    # in RViz to relocalize once the stack is running.
+    set_initial_pose: true
+    initial_pose_x: 0.0
+    initial_pose_y: 0.0
+    initial_pose_z: 0.0
+    initial_pose_yaw: 0.0
+
     # Particle filter
     # max_particles kept low to prevent kd-tree assertion crash on initial pose.
     # The crash (pf_kdtree_cluster assertion) happens when too many particles are
@@ -349,6 +358,9 @@ lifecycle_manager:
   ros__parameters:
     use_sim_time: false
     autostart: true
+    # Increase timeouts so map_server has time to load the .pgm on a loaded Pi 4
+    service_call_timeout: 60.0
+    bond_timeout: 0.0
     node_names:
       - map_server
       - amcl

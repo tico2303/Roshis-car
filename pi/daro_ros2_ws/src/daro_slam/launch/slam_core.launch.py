@@ -22,7 +22,7 @@ from launch.actions import (
     ExecuteProcess,
     TimerAction,
 )
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 
 from launch_ros.actions import LifecycleNode, Node
@@ -37,10 +37,11 @@ def generate_launch_description():
     default_slam_params = os.path.join(slam_share,   "config", "slam.yaml")
     default_urdf        = os.path.join(description,  "urdf",   "daro_min.urdf")
 
-    slam_params      = LaunchConfiguration("slam_params")
-    log_level        = LaunchConfiguration("log_level")
-    use_sim_time     = LaunchConfiguration("use_sim_time")
-    publish_odom_tf  = LaunchConfiguration("publish_odom_tf")
+    slam_params          = LaunchConfiguration("slam_params")
+    log_level            = LaunchConfiguration("log_level")
+    use_sim_time         = LaunchConfiguration("use_sim_time")
+    publish_odom_tf      = LaunchConfiguration("publish_odom_tf")
+    start_slam_toolbox   = LaunchConfiguration("start_slam_toolbox")
 
     # -------------------------------------------------
     # robot_state_publisher (URDF → TF)
@@ -77,6 +78,8 @@ def generate_launch_description():
 
     # -------------------------------------------------
     # SLAM Toolbox Lifecycle Node
+    # Skipped when start_slam_toolbox:=false (e.g. in nav mode where AMCL
+    # provides map→odom — running both causes a TF conflict).
     # -------------------------------------------------
     slam_node = LifecycleNode(
         package="slam_toolbox",
@@ -90,6 +93,7 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
         ],
         arguments=["--ros-args", "--log-level", log_level],
+        condition=IfCondition(start_slam_toolbox),
     )
 
     # -------------------------------------------------
@@ -98,10 +102,12 @@ def generate_launch_description():
     configure_slam = ExecuteProcess(
         cmd=["ros2", "lifecycle", "set", "/slam_toolbox", "configure"],
         output="screen",
+        condition=IfCondition(start_slam_toolbox),
     )
     activate_slam = ExecuteProcess(
         cmd=["ros2", "lifecycle", "set", "/slam_toolbox", "activate"],
         output="screen",
+        condition=IfCondition(start_slam_toolbox),
     )
 
     return LaunchDescription([
@@ -127,6 +133,14 @@ def generate_launch_description():
             description=(
                 "Publish static identity odom→base_link. Set false when "
                 "EKF or Gazebo DiffDrive provides this transform."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "start_slam_toolbox",
+            default_value="true",
+            description=(
+                "Start the SLAM Toolbox lifecycle node. Set false in nav mode "
+                "where AMCL provides map→odom — both publishing it causes a TF conflict."
             ),
         ),
 

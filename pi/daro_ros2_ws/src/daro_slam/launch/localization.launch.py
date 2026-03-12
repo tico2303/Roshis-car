@@ -24,6 +24,10 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", log_level],
         respawn=True,
         respawn_delay=2.0,
+        # robot_localization publishes to odometry/filtered by default;
+        # remap to /odom so Nav2 (bt_navigator, velocity_smoother) and
+        # AMCL find the odometry topic they expect.
+        remappings=[("odometry/filtered", "/odom")],
     )
 
     return LaunchDescription([

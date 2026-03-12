@@ -32,7 +32,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from daro_bringup.defaults import ESP_PORT, BAUD
@@ -85,18 +85,20 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ── SLAM core: RSP + static TF only (no SLAM Toolbox) ────────────────────
-    # AMCL (in nav2_stack) publishes map→odom — we don't need SLAM Toolbox.
+    # ── SLAM core: RSP only (no SLAM Toolbox, no static odom TF) ─────────────
+    # AMCL (in nav2_stack) publishes map→odom — starting SLAM Toolbox too
+    # would cause both to fight over the map→odom TF edge.
     # EKF publishes odom→base_link, so suppress the static identity TF.
     include_slam_core = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(slam_share, "launch", "slam_core.launch.py")
         ),
         launch_arguments={
-            "slam_params":     slam_params,
-            "use_sim_time":    use_sim_time,
-            "publish_odom_tf": "false",  # EKF handles odom→base_link
-            "log_level":       log_level,
+            "slam_params":          slam_params,
+            "use_sim_time":         use_sim_time,
+            "publish_odom_tf":      "false",   # EKF handles odom→base_link
+            "start_slam_toolbox":   "false",   # AMCL handles map→odom
+            "log_level":            log_level,
         }.items(),
     )
 
@@ -157,10 +159,13 @@ def generate_launch_description():
             description="ROS log level",
         ),
 
-        # Hardware must come up before Nav2 so topics/TF are available
+        # Hardware must come up before Nav2 so topics/TF are available.
+        # Nav2 is delayed 15 s so the map_server has time to load the .pgm
+        # and so DDS participant slots settle before the lifecycle manager
+        # sends configure RPCs (avoids 73 ms timeout on a loaded Pi 4).
         include_daro,
         include_lidar,
         include_localization,
         include_slam_core,
-        include_nav2,
+        TimerAction(period=15.0, actions=[include_nav2]),
     ])

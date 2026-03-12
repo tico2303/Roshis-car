@@ -13,9 +13,10 @@ setup(
         ("share/" + package_name, ["package.xml"]),
         (os.path.join("share", package_name, "launch"), glob("launch/*.launch.py")),
         (os.path.join("share", package_name, "config"), glob("config/*.yaml")),
-        # maps are generated at runtime by map_saver_cli — never installed by colcon.
-        # The .gitkeep just ensures the directory exists in the install tree.
-        (os.path.join("share", package_name, "maps"), ["maps/.gitkeep"]),
+        # .gitkeep ensures the directory exists in the install tree.
+        # glob picks up any saved maps (.yaml + .pgm) checked into the repo.
+        (os.path.join("share", package_name, "maps"),
+            ["maps/.gitkeep"] + glob("maps/*.yaml") + glob("maps/*.pgm")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

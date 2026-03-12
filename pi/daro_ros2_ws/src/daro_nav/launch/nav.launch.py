@@ -15,10 +15,10 @@ Prerequisites:
        # drive the robot around to build the map, then:
        ros2 run nav2_map_server map_saver_cli -f ~/maps/my_map
 
-  2. Pass the map path at launch time (map:= argument).
+  2. Optionally pass a custom map path (defaults to daro_nav/maps/my_map.yaml).
 
 Usage:
-  ros2 launch daro_nav nav.launch.py map:=/home/pi/maps/my_map.yaml
+  ros2 launch daro_nav nav.launch.py
   ros2 launch daro_nav nav.launch.py map:=/home/pi/maps/my_map.yaml esp_port:=/dev/ttyUSB0
 
 RViz (on macOS Docker or Pi with display):
@@ -118,6 +118,7 @@ def generate_launch_description():
 
         DeclareLaunchArgument(
             "map",
+            default_value=os.path.join(daro_nav_share, "maps", "maps.yaml"),
             description="Full path to the saved map .yaml file",
         ),
         DeclareLaunchArgument(

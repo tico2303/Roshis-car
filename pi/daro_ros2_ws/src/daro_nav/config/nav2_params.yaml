@@ -18,8 +18,11 @@ amcl:
     use_sim_time: false
 
     # Particle filter
-    min_particles: 500
-    max_particles: 2000
+    # max_particles kept low to prevent kd-tree assertion crash on initial pose.
+    # The crash (pf_kdtree_cluster assertion) happens when too many particles are
+    # spawned at once across a large covariance area. 300 is safe on a Pi 4.
+    min_particles: 100
+    max_particles: 300
     pf_err: 0.05
     pf_z: 0.99
     resample_interval: 1
